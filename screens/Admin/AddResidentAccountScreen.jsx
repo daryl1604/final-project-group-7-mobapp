@@ -9,7 +9,9 @@ import { PUROK_OPTIONS } from "../../constants/appConstants";
 import { useApp } from "../../storage/AppProvider";
 import useKeyboardAwareFieldFocus from "../../utils/useKeyboardAwareFieldFocus";
 import {
+  validateAddress,
   validateConfirmPassword,
+  validateDateOfBirth,
   validateEmail,
   validateFullName,
   validatePassword,
@@ -23,10 +25,12 @@ export default function AddResidentAccountScreen() {
   const [form, setForm] = useState({
     fullName: "",
     email: "",
+    contactNumber: "",
+    address: "",
+    dateOfBirth: "",
+    purok: PUROK_OPTIONS[0],
     password: "",
     confirmPassword: "",
-    contactNumber: "",
-    purok: PUROK_OPTIONS[0],
   });
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -47,9 +51,11 @@ export default function AddResidentAccountScreen() {
     return {
       fullName: validateFullName(form.fullName),
       email: validateEmail(form.email) || duplicateEmail,
+      contactNumber: validatePhoneNumber(form.contactNumber) || duplicatePhone,
+      address: validateAddress(form.address),
+      dateOfBirth: validateDateOfBirth(form.dateOfBirth),
       password: validatePassword(form.password),
       confirmPassword: validateConfirmPassword(form.password, form.confirmPassword),
-      contactNumber: validatePhoneNumber(form.contactNumber) || duplicatePhone,
     };
   }, [accounts, form]);
 
@@ -60,9 +66,12 @@ export default function AddResidentAccountScreen() {
     setTouched({
       fullName: true,
       email: true,
+      contactNumber: true,
+      address: true,
+      dateOfBirth: true,
+      purok: true,
       password: true,
       confirmPassword: true,
-      contactNumber: true,
     });
 
     if (Object.values(errors).some(Boolean)) {
@@ -76,10 +85,12 @@ export default function AddResidentAccountScreen() {
       setForm({
         fullName: "",
         email: "",
+        contactNumber: "",
+        address: "",
+        dateOfBirth: "",
+        purok: PUROK_OPTIONS[0],
         password: "",
         confirmPassword: "",
-        contactNumber: "",
-        purok: PUROK_OPTIONS[0],
       });
       setTouched({});
     } catch (error) {
@@ -121,6 +132,42 @@ export default function AddResidentAccountScreen() {
           returnKeyType="next"
         />
         <FormField
+          label="Contact number"
+          value={form.contactNumber}
+          onChangeText={(value) => updateField("contactNumber", value)}
+          onBlur={() => setTouched((current) => ({ ...current, contactNumber: true }))}
+          onFocus={handleFieldFocus("contactNumber")}
+          inputRef={registerInputRef("contactNumber")}
+          error={showError("contactNumber")}
+          placeholder="09xxxxxxxxx"
+          keyboardType="phone-pad"
+        />
+        <FormField
+          label="Address"
+          value={form.address}
+          onChangeText={(value) => updateField("address", value)}
+          onBlur={() => setTouched((current) => ({ ...current, address: true }))}
+          onFocus={handleFieldFocus("address")}
+          inputRef={registerInputRef("address")}
+          error={showError("address")}
+          placeholder="e.g., 123 Main Street, Barangay"
+          autoCapitalize="words"
+          returnKeyType="next"
+        />
+        <FormField
+          label="Date of birth"
+          value={form.dateOfBirth}
+          onChangeText={(value) => updateField("dateOfBirth", value)}
+          onBlur={() => setTouched((current) => ({ ...current, dateOfBirth: true }))}
+          onFocus={handleFieldFocus("dateOfBirth")}
+          inputRef={registerInputRef("dateOfBirth")}
+          error={showError("dateOfBirth")}
+          placeholder="YYYY-MM-DD"
+          autoCapitalize="none"
+          returnKeyType="next"
+        />
+        <OptionSelector label="Purok" value={form.purok} onChange={(value) => updateField("purok", value)} options={PUROK_OPTIONS} />
+        <FormField
           label="Password"
           value={form.password}
           onChangeText={(value) => updateField("password", value)}
@@ -146,18 +193,6 @@ export default function AddResidentAccountScreen() {
           autoCapitalize="none"
           returnKeyType="next"
         />
-        <FormField
-          label="Contact number"
-          value={form.contactNumber}
-          onChangeText={(value) => updateField("contactNumber", value)}
-          onBlur={() => setTouched((current) => ({ ...current, contactNumber: true }))}
-          onFocus={handleFieldFocus("contactNumber")}
-          inputRef={registerInputRef("contactNumber")}
-          error={showError("contactNumber")}
-          placeholder="09xxxxxxxxx"
-          keyboardType="phone-pad"
-        />
-        <OptionSelector label="Purok" value={form.purok} onChange={(value) => updateField("purok", value)} options={PUROK_OPTIONS} />
       </View>
 
       <PrimaryButton label="Add resident" onPress={handleAddResident} loading={submitting} />

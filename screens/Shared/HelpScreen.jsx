@@ -13,7 +13,7 @@ const ADMIN_HELP_BLOCKS = [
   {
     icon: "people-outline",
     title: "Manage residents",
-    text: "Use the Manage tab to add resident accounts, open the resident registry, and remove accounts only after the built-in confirmation prompt appears.",
+    text: "Use the drawer Manage section to add resident accounts, open the resident registry, and remove accounts only after the built-in confirmation prompt appears.",
   },
   {
     icon: "notifications-outline",

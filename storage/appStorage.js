@@ -9,7 +9,7 @@ import { seedAccounts, seedNotifications, seedReports } from "./seedData";
 
 const defaultPreferences = {
   themeMode: "light",
-  notificationsEnabled: false,
+  notificationsEnabled: true,
   notificationsPermission: "undetermined",
 };
 

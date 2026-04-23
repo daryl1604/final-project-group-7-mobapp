@@ -26,7 +26,7 @@ export default function ManageAccountsScreen() {
 
   return (
     <ScreenContainer>
-      <AppHeader title="Resident Accounts" variant="toolbar" />
+      <AppHeader title="Manage Accounts" variant="toolbar" />
 
       {residents.map((resident) => {
         const residentReportCount = reports.filter((report) => report.residentId === resident.id).length;

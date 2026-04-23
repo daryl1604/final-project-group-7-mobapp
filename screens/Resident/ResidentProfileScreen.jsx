@@ -131,11 +131,15 @@ function formatRegisteredDate(value) {
   });
 }
 
-export default function ResidentProfileScreen() {
-  const { accounts, currentUser, updateProfile, changePassword, showAlert, theme, reports } = useApp();
+export default function ResidentProfileScreen({ route }) {
+  const { accounts, currentUser, updateProfile, changePassword, showAlert, theme, reports, openDrawer } = useApp();
+  const isReadOnly = Boolean(route?.params?.isReadOnly);
+  const profileUser = isReadOnly
+    ? accounts.find((account) => account.id === route?.params?.userId) || null
+    : currentUser;
   const scrollRef = useRef(null);
   const { handleFieldFocus, registerInputRef } = useKeyboardAwareFieldFocus({ scrollRef });
-  const [form, setForm] = useState(createInitialForm(currentUser));
+  const [form, setForm] = useState(createInitialForm(profileUser));
   const [touched, setTouched] = useState({});
   const [saving, setSaving] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -160,7 +164,7 @@ export default function ResidentProfileScreen() {
   const styles = createStyles(theme);
 
   useEffect(() => {
-    setForm(createInitialForm(currentUser));
+    setForm(createInitialForm(profileUser));
     setTouched({});
     setPhotoError("");
     setPasswordForm({
@@ -176,11 +180,15 @@ export default function ResidentProfileScreen() {
     setPickerMode("day");
     setEditingProfile(false);
     setEditingPassword(false);
-  }, [currentUser]);
+  }, [profileUser]);
+
+  if (!profileUser) {
+    return null;
+  }
 
   const residentReports = useMemo(
-    () => reports.filter((report) => report.residentId === currentUser?.id),
-    [reports, currentUser?.id]
+    () => reports.filter((report) => report.residentId === profileUser?.id),
+    [reports, profileUser?.id]
   );
 
   const summary = useMemo(
@@ -196,9 +204,9 @@ export default function ResidentProfileScreen() {
   const normalizedEmail = form.email.trim().toLowerCase();
   const normalizedPhone = normalizePhoneNumber(form.contactNumber);
   const duplicateEmail = accounts.some(
-    (account) => account.id !== currentUser?.id && account.email.trim().toLowerCase() === normalizedEmail
+    (account) => account.id !== profileUser?.id && account.email.trim().toLowerCase() === normalizedEmail
   );
-  const duplicatePhone = Boolean(findPhoneConflict(accounts, normalizedPhone, currentUser?.id));
+  const duplicatePhone = Boolean(findPhoneConflict(accounts, normalizedPhone, profileUser?.id));
   const dobDisplayValue = formatDateLabel(form.dateOfBirth);
   const calendarDays = useMemo(() => buildCalendarDays(pickerMonth), [pickerMonth]);
   const yearOptions = useMemo(() => {
@@ -235,7 +243,7 @@ export default function ResidentProfileScreen() {
 
   const passwordErrors = useMemo(
     () => ({
-      currentPassword: validateCurrentPassword(passwordForm.currentPassword, currentUser?.password),
+      currentPassword: validateCurrentPassword(passwordForm.currentPassword, profileUser?.password),
       newPassword: !String(passwordForm.newPassword || "")
         ? "New password is required."
         : isSamePassword(passwordForm.currentPassword, passwordForm.newPassword)
@@ -243,7 +251,7 @@ export default function ResidentProfileScreen() {
           : validatePassword(passwordForm.newPassword),
       confirmNewPassword: validateConfirmPassword(passwordForm.newPassword, passwordForm.confirmNewPassword),
     }),
-    [currentUser?.password, passwordForm]
+    [passwordForm, profileUser?.password]
   );
 
   const showError = (field) => (touched[field] ? errors[field] : "");
@@ -293,7 +301,7 @@ export default function ResidentProfileScreen() {
   };
 
   const handleProfileCancel = () => {
-    setForm(createInitialForm(currentUser));
+    setForm(createInitialForm(profileUser));
     setTouched({});
     setPhotoError("");
     setEditingProfile(false);
@@ -388,7 +396,7 @@ export default function ResidentProfileScreen() {
 
     try {
       setSaving(true);
-      await updateProfile(currentUser.id, {
+      await updateProfile(profileUser.id, {
         ...form,
         address: form.address.trim(),
         dateOfBirth: form.dateOfBirth,
@@ -423,7 +431,7 @@ export default function ResidentProfileScreen() {
 
     try {
       setSaving(true);
-      await changePassword(currentUser.id, passwordForm.currentPassword, passwordForm.newPassword);
+      await changePassword(profileUser.id, passwordForm.currentPassword, passwordForm.newPassword);
       setPasswordForm({
         currentPassword: "",
         newPassword: "",
@@ -443,9 +451,9 @@ export default function ResidentProfileScreen() {
     }
   };
 
-  const initials = getInitials(form.fullName || currentUser?.fullName);
-  const registeredDate = formatRegisteredDate(currentUser?.createdAt);
-  const lastPasswordChanged = formatRegisteredDate(currentUser?.passwordUpdatedAt || currentUser?.createdAt);
+  const initials = getInitials(form.fullName || profileUser?.fullName);
+  const registeredDate = formatRegisteredDate(profileUser?.createdAt);
+  const lastPasswordChanged = formatRegisteredDate(profileUser?.passwordUpdatedAt || profileUser?.createdAt);
   const isProfileValid = !Object.values(errors).some(Boolean);
   const hasPasswordChanges = Boolean(
     passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmNewPassword
@@ -460,7 +468,12 @@ export default function ResidentProfileScreen() {
       keyboardShouldPersistTaps="handled"
       contentStyle={styles.screenContent}
     >
-      <AppHeader title="Profile" variant="toolbar" />
+      <AppHeader
+        title={isReadOnly ? "View Profile" : "Profile"}
+        variant="toolbar"
+        leftIconName={isReadOnly ? undefined : "menu-outline"}
+        onLeftPress={isReadOnly ? undefined : openDrawer}
+      />
 
       <View style={styles.profileHero}>
         <View style={styles.avatarShell}>
@@ -472,7 +485,7 @@ export default function ResidentProfileScreen() {
             </View>
           )}
 
-          {editingProfile ? (
+          {editingProfile && !isReadOnly ? (
             <>
               <Pressable style={[styles.avatarAction, styles.avatarEditAction]} onPress={handlePickImage}>
                 <Ionicons name="camera-outline" size={16} color="#ffffff" />
@@ -487,8 +500,8 @@ export default function ResidentProfileScreen() {
         </View>
 
         <View style={styles.profileHeroText}>
-          <Text style={styles.profileName}>{currentUser?.fullName || "Resident"}</Text>
-          <Text style={styles.profileMeta}>{currentUser?.email || "Not available"}</Text>
+          <Text style={styles.profileName}>{profileUser?.fullName || "Resident"}</Text>
+          <Text style={styles.profileMeta}>{profileUser?.email || "Not available"}</Text>
         </View>
 
         {showError("photoUri") ? <Text style={styles.errorText}>{showError("photoUri")}</Text> : null}
@@ -497,7 +510,7 @@ export default function ResidentProfileScreen() {
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Profile Information</Text>
-          {!editingProfile ? (
+          {!editingProfile && !isReadOnly ? (
             <Pressable style={styles.editChip} onPress={handleProfileEdit}>
               <Ionicons name="create-outline" size={15} color={theme.primary} />
               <Text style={styles.editChipText}>Edit Profile</Text>
@@ -637,13 +650,13 @@ export default function ResidentProfileScreen() {
           <View style={styles.detailsList}>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Full name</Text>
-              <Text style={styles.detailValue}>{currentUser?.fullName || "Not available"}</Text>
+              <Text style={styles.detailValue}>{profileUser?.fullName || "Not available"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Email</Text>
-              <Text style={styles.detailValue}>{currentUser?.email || "Not available"}</Text>
+              <Text style={styles.detailValue}>{profileUser?.email || "Not available"}</Text>
             </View>
-            {currentUser?.password ? (
+            {!isReadOnly && profileUser?.password ? (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Password</Text>
                 <Text style={styles.detailValue}>********</Text>
@@ -651,31 +664,31 @@ export default function ResidentProfileScreen() {
             ) : null}
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Contact number</Text>
-              <Text style={styles.detailValue}>{currentUser?.contactNumber || "Not available"}</Text>
+              <Text style={styles.detailValue}>{profileUser?.contactNumber || "Not available"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Address</Text>
-              <Text style={styles.detailValue}>{currentUser?.address?.trim() || "Not available"}</Text>
+              <Text style={styles.detailValue}>{profileUser?.address?.trim() || "Not available"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Date of birth</Text>
-              <Text style={styles.detailValue}>{formatDateLabel(currentUser?.dateOfBirth)}</Text>
+              <Text style={styles.detailValue}>{formatDateLabel(profileUser?.dateOfBirth)}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Gender</Text>
-              <Text style={styles.detailValue}>{currentUser?.gender || "Not available"}</Text>
+              <Text style={styles.detailValue}>{profileUser?.gender || "Not available"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Age</Text>
-              <Text style={styles.detailValue}>{currentUser?.age ?? "Not available"}</Text>
+              <Text style={styles.detailValue}>{profileUser?.age ?? "Not available"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Purok</Text>
-              <Text style={styles.detailValue}>{currentUser?.purok || "Not available"}</Text>
+              <Text style={styles.detailValue}>{profileUser?.purok || "Not available"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Bio</Text>
-              <Text style={styles.detailValue}>{currentUser?.bio?.trim() || "No bio added yet."}</Text>
+              <Text style={styles.detailValue}>{profileUser?.bio?.trim() || "No bio added yet."}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Date registered</Text>
@@ -684,7 +697,7 @@ export default function ResidentProfileScreen() {
           </View>
         )}
 
-        {editingProfile ? (
+        {editingProfile && !isReadOnly ? (
           <View style={styles.sectionActions}>
             <View style={styles.primaryActionWrap}>
               <PrimaryButton
@@ -701,7 +714,8 @@ export default function ResidentProfileScreen() {
         ) : null}
       </View>
 
-      <View style={styles.sectionCard}>
+      {!isReadOnly ? (
+        <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Change Password</Text>
           {!editingPassword ? (
@@ -845,7 +859,8 @@ export default function ResidentProfileScreen() {
             </Pressable>
           </View>
         ) : null}
-      </View>
+        </View>
+      ) : null}
 
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
@@ -1061,7 +1076,7 @@ export default function ResidentProfileScreen() {
 function createStyles(theme) {
   return StyleSheet.create({
     screenContent: {
-      paddingBottom: 28,
+      paddingBottom: 156,
     },
     profileHero: {
       backgroundColor: theme.surface,

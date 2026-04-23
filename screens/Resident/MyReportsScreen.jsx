@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppHeader from "../../components/common/AppHeader";
 import ScreenContainer from "../../components/common/ScreenContainer";
@@ -8,12 +9,13 @@ import ReportCard from "../../components/reports/ReportCard";
 import { REPORT_SORT_OPTIONS, REPORT_STATUSES } from "../../constants/appConstants";
 import { useApp } from "../../storage/AppProvider";
 
-export default function MyReportsScreen({ navigation }) {
+export default function MyReportsScreen({ navigation, route }) {
   const { currentUser, reports, theme } = useApp();
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [statusFilter, setStatusFilter] = useState("");
   const styles = createStyles(theme);
+  const handledSelectionRef = useRef(null);
 
   const residentReports = useMemo(() => {
     const filtered = reports.filter((report) => {
@@ -43,6 +45,32 @@ export default function MyReportsScreen({ navigation }) {
 
     return [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [currentUser.id, reports, search, sortBy, statusFilter]);
+
+  useEffect(() => {
+    const selectedReportId = route?.params?.selectedReportId;
+    const selectionKey = route?.params?.selectionKey;
+
+    if (!selectedReportId || !selectionKey || handledSelectionRef.current === selectionKey) {
+      return;
+    }
+
+    handledSelectionRef.current = selectionKey;
+    navigation.navigate("ResidentReportDetails", { reportId: selectedReportId });
+  }, [navigation, route?.params?.selectedReportId, route?.params?.selectionKey]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        handledSelectionRef.current = null;
+        if (route?.params?.selectedReportId || route?.params?.selectionKey) {
+          navigation.setParams({
+            selectedReportId: undefined,
+            selectionKey: undefined,
+          });
+        }
+      };
+    }, [navigation, route?.params?.selectedReportId, route?.params?.selectionKey])
+  );
 
   return (
     <ScreenContainer keyboardShouldPersistTaps="handled">

@@ -81,3 +81,23 @@ export async function sendLocalNotification({ title, body, data }) {
 
   return true;
 }
+
+export async function addNotificationResponseListener(listener) {
+  const Notifications = await getNotificationsModule();
+
+  if (!Notifications) {
+    return null;
+  }
+
+  return Notifications.addNotificationResponseReceivedListener(listener);
+}
+
+export async function getLastNotificationResponse() {
+  const Notifications = await getNotificationsModule();
+
+  if (!Notifications) {
+    return null;
+  }
+
+  return Notifications.getLastNotificationResponseAsync();
+}

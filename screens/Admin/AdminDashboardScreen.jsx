@@ -7,6 +7,24 @@ import { useApp } from "../../storage/AppProvider";
 import { buildAnalytics } from "../../utils/analyticsUtils";
 import { formatDate, formatTime } from "../../utils/dateUtils";
 
+const INCIDENT_OPTIONS = [
+  { value: "noise complaint", icon: "volume-high-outline" },
+  { value: "public disturbance", icon: "volume-high-outline" },
+  { value: "trash / garbage issue", icon: "trash-outline" },
+  { value: "trash complaint", icon: "trash-outline" },
+  { value: "flooding", icon: "water-outline" },
+  { value: "road damage", icon: "construct-outline" },
+  { value: "broken streetlight", icon: "bulb-outline" },
+  { value: "drainage problem", icon: "git-network-outline" },
+  { value: "drainage concern", icon: "git-network-outline" },
+  { value: "illegal parking", icon: "car-outline" },
+  { value: "vandalism", icon: "color-wand-outline" },
+  { value: "stray animals", icon: "paw-outline" },
+  { value: "other", icon: "apps-outline" },
+  { value: "others", icon: "apps-outline" },
+  { value: "water leak", icon: "apps-outline" },
+];
+
 function getGreeting() {
   const hour = new Date().getHours();
 
@@ -55,6 +73,107 @@ function getStatusTone(status) {
 
 function countReportsByStatus(reports, status) {
   return reports.filter((report) => report.status === status).length;
+}
+
+function getStatusPillTone(status, theme) {
+  if (status === "Resolved") {
+    return { text: theme.success, bg: "rgba(52, 211, 153, 0.16)", border: "rgba(52, 211, 153, 0.28)" };
+  }
+
+  if (status === "Rejected") {
+    return { text: theme.danger, bg: theme.dangerSoft, border: "rgba(248, 113, 113, 0.26)" };
+  }
+
+  if (status === "For Confirmation") {
+    return { text: "#b56eff", bg: "rgba(181, 110, 255, 0.14)", border: "rgba(181, 110, 255, 0.26)" };
+  }
+
+  if (status === "Ongoing") {
+    return { text: theme.primary, bg: theme.primarySoft, border: "rgba(79, 131, 255, 0.28)" };
+  }
+
+  return { text: "#ffbf5a", bg: "rgba(255, 191, 90, 0.14)", border: "rgba(255, 191, 90, 0.24)" };
+}
+
+function getIncidentIcon(incidentType = "") {
+  const normalized = incidentType.trim().toLowerCase();
+  return INCIDENT_OPTIONS.find((item) => item.value === normalized)?.icon || "document-text-outline";
+}
+
+function getCardAccent(status, theme) {
+  return getStatusPillTone(status, theme).text;
+}
+
+function DashboardReportListCard({ report, navigation, styles, theme }) {
+  const statusTone = getStatusPillTone(report.status, theme);
+  const accentColor = getCardAccent(report.status, theme);
+
+  return (
+    <View style={styles.reportCardShell}>
+      <View style={[styles.reportAccent, { backgroundColor: accentColor }]} />
+      <View style={styles.reportCard}>
+        <View style={styles.reportTopRow}>
+          <View style={styles.reportHeading}>
+            <View style={[styles.incidentIconWrap, { backgroundColor: `${accentColor}20` }]}>
+              <Ionicons name={getIncidentIcon(report.incidentType)} size={26} color={accentColor} />
+            </View>
+            <View style={styles.reportHeadingText}>
+              <Text style={styles.reportTitle}>{report.incidentType}</Text>
+              <View style={styles.identityRow}>
+                {report.residentName ? (
+                  <Pressable
+                    style={styles.namePill}
+                    onPress={() =>
+                      navigation.navigate("ResidentProfileView", {
+                        userId: report.residentId,
+                        isReadOnly: true,
+                      })
+                    }
+                    disabled={!report.residentId}
+                  >
+                    <Text style={styles.namePillText}>{report.residentName}</Text>
+                  </Pressable>
+                ) : null}
+                {report.purok ? <Text style={styles.purokText}>{report.purok}</Text> : null}
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.statusPill, { backgroundColor: statusTone.bg, borderColor: statusTone.border }]}>
+            <Text style={[styles.statusPillText, { color: statusTone.text }]}>{report.status}</Text>
+          </View>
+        </View>
+
+        <View style={styles.metaChipRow}>
+          <View style={styles.metaInlineItem}>
+            <Ionicons name="calendar-outline" size={16} color={theme.textSoft} />
+            <Text style={styles.metaInlineText}>{formatDate(report.createdAt)}</Text>
+          </View>
+          <View style={styles.metaInlineItem}>
+            <Ionicons name="time-outline" size={16} color={theme.textSoft} />
+            <Text style={styles.metaInlineText}>{formatTime(report.createdAt)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.locationInlineRow}>
+          <Ionicons name="location-outline" size={18} color={theme.primary} />
+          <Text style={styles.locationText} numberOfLines={1}>
+            {report.location?.address || "Location unavailable"}
+          </Text>
+        </View>
+
+        <View style={styles.cardFooter}>
+          <Pressable
+            style={styles.viewReportButton}
+            onPress={() => navigation.navigate("AdminReportDetails", { reportId: report.id })}
+          >
+            <Text style={styles.viewReportButtonText}>View Report</Text>
+            <Ionicons name="arrow-forward" size={16} color={theme.primary} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 export default function AdminDashboardScreen({ navigation }) {
@@ -301,61 +420,15 @@ export default function AdminDashboardScreen({ navigation }) {
         </View>
 
         {liveDashboardStats.latestReports.length > 0 ? (
-          liveDashboardStats.latestReports.map((report) => {
-            const tone = getStatusTone(report.status);
-
-            return (
-              <Pressable
-                key={report.id}
-                style={[styles.reportCard, { borderLeftColor: tone.accent }]}
-                onPress={() => navigation.navigate("AdminReportDetails", { reportId: report.id })}
-              >
-                <View style={[styles.reportIconWrap, { backgroundColor: `${tone.accent}22` }]}>
-                  <Ionicons name="document-text-outline" size={26} color={tone.accent} />
-                </View>
-
-                <View style={styles.reportBody}>
-                  <View style={styles.reportHeader}>
-                    <Text style={styles.reportTitle}>{report.incidentType}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: tone.chipBg }]}>
-                      <Text style={[styles.statusText, { color: tone.chipText }]}>{report.status}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.reportChipRow}>
-                    {report.residentName ? (
-                      <View style={styles.personChip}>
-                        <Text style={styles.personChipText}>{report.residentName}</Text>
-                      </View>
-                    ) : null}
-                    <Text style={styles.reportPurok}>{report.purok}</Text>
-                  </View>
-
-                  <Text style={styles.reportDescription} numberOfLines={2}>
-                    {report.description}
-                  </Text>
-
-                  <View style={styles.reportMetaRow}>
-                    <View style={styles.metaPill}>
-                      <Ionicons name="calendar-outline" size={14} color={theme.textSoft} />
-                      <Text style={styles.metaPillText}>{formatDate(report.createdAt)}</Text>
-                    </View>
-                    <View style={styles.metaPill}>
-                      <Ionicons name="time-outline" size={14} color={theme.textSoft} />
-                      <Text style={styles.metaPillText}>{formatTime(report.createdAt)}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.locationRow}>
-                    <Ionicons name="location-outline" size={15} color={theme.primary} />
-                    <Text style={styles.locationText} numberOfLines={2}>
-                      {report.location?.address || "Location unavailable"}
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })
+          liveDashboardStats.latestReports.map((report) => (
+            <DashboardReportListCard
+              key={report.id}
+              report={report}
+              navigation={navigation}
+              styles={styles}
+              theme={theme}
+            />
+          ))
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No reports yet</Text>
@@ -681,81 +754,92 @@ function createStyles(theme, width) {
       fontSize: 14,
       fontWeight: "800",
     },
+    reportCardShell: {
+      flexDirection: "row",
+      alignItems: "stretch",
+      gap: 0,
+    },
+    reportAccent: {
+      width: 4,
+      borderTopLeftRadius: 24,
+      borderBottomLeftRadius: 24,
+    },
     reportCard: {
+      flex: 1,
       backgroundColor: theme.mode === "dark" ? "#131f35" : theme.surfaceSoft,
-      borderRadius: 24,
+      borderTopRightRadius: 24,
+      borderBottomRightRadius: 24,
       borderWidth: 1,
       borderColor: theme.border,
-      borderLeftWidth: 4,
       padding: 16,
-      flexDirection: "row",
       gap: 14,
     },
-    reportIconWrap: {
-      width: 76,
-      height: 76,
-      borderRadius: 22,
+    reportTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+    },
+    reportHeading: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    incidentIconWrap: {
+      width: 56,
+      height: 56,
+      borderRadius: 20,
       alignItems: "center",
       justifyContent: "center",
     },
-    reportBody: {
+    reportHeadingText: {
       flex: 1,
-      gap: 10,
-    },
-    reportHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      gap: 10,
+      gap: 8,
     },
     reportTitle: {
       color: theme.text,
       fontSize: 17,
       fontWeight: "900",
-      flex: 1,
+      letterSpacing: -0.3,
     },
-    statusBadge: {
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      borderRadius: 999,
-    },
-    statusText: {
-      fontSize: 12,
-      fontWeight: "800",
-    },
-    reportChipRow: {
+    identityRow: {
       flexDirection: "row",
       alignItems: "center",
       flexWrap: "wrap",
       gap: 8,
     },
-    personChip: {
+    namePill: {
       backgroundColor: theme.mode === "dark" ? "rgba(59,130,246,0.18)" : theme.primarySoft,
       borderRadius: 999,
       paddingHorizontal: 10,
       paddingVertical: 5,
     },
-    personChipText: {
+    namePillText: {
       color: theme.primary,
       fontSize: 12,
       fontWeight: "800",
     },
-    reportPurok: {
+    purokText: {
       color: theme.textMuted,
       fontSize: 13,
       fontWeight: "700",
     },
-    reportDescription: {
-      color: theme.text,
-      fontSize: 14,
-      lineHeight: 20,
+    statusPill: {
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
     },
-    reportMetaRow: {
+    statusPillText: {
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    metaChipRow: {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 8,
     },
-    metaPill: {
+    metaInlineItem: {
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
@@ -766,14 +850,14 @@ function createStyles(theme, width) {
       paddingHorizontal: 10,
       paddingVertical: 7,
     },
-    metaPillText: {
+    metaInlineText: {
       color: theme.textMuted,
       fontSize: 12,
       fontWeight: "700",
     },
-    locationRow: {
+    locationInlineRow: {
       flexDirection: "row",
-      alignItems: "flex-start",
+      alignItems: "center",
       gap: 8,
     },
     locationText: {
@@ -782,6 +866,20 @@ function createStyles(theme, width) {
       fontSize: 14,
       fontWeight: "600",
       lineHeight: 20,
+    },
+    cardFooter: {
+      alignItems: "flex-start",
+    },
+    viewReportButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 4,
+    },
+    viewReportButtonText: {
+      color: theme.primary,
+      fontSize: 14,
+      fontWeight: "800",
     },
     emptyState: {
       backgroundColor: theme.mode === "dark" ? "#131f35" : theme.surfaceSoft,

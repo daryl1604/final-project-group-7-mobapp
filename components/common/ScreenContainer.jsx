@@ -30,7 +30,7 @@ export default function ScreenContainer({
     <SafeAreaView style={[styles.safeArea, safeStyle]}>
       <KeyboardAvoidingView
         style={styles.wrapper}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         {header ? <View style={styles.headerSlot}>{header}</View> : null}
         {scroll ? (
