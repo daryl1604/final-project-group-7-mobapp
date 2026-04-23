@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import AppHeader from "../../components/common/AppHeader";
 import ScreenContainer from "../../components/common/ScreenContainer";
 import FormField from "../../components/forms/FormField";
@@ -14,8 +14,16 @@ export default function ResidentReportDetailsScreen({ route, navigation }) {
   const { reportId } = route.params;
   const { currentUser, reports, addResidentReply, updateReportStatus, showAlert, theme } = useApp();
   const [replyText, setReplyText] = useState("");
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const scrollRef = useRef(null);
   const report = useMemo(() => reports.find((item) => item.id === reportId), [reportId, reports]);
   const residentReportDetailsStyles = createResidentReportDetailsStyles(theme);
+
+  const focusReplyInput = () => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd?.({ animated: true });
+    });
+  };
 
   if (!report) {
     return (
@@ -47,13 +55,20 @@ export default function ResidentReportDetailsScreen({ route, navigation }) {
   };
 
   return (
-    <ScreenContainer>
-      <AppHeader title="Report Details" variant="toolbar" />
+    <ScreenContainer scrollRef={scrollRef} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <AppHeader title="Report Details" variant="toolbar" preferBackButton />
       <StatusBadge status={report.status} />
       <PhotoPreview uri={report.photoUri} />
       <View style={residentReportDetailsStyles.card}>
         <Text style={residentReportDetailsStyles.label}>Description</Text>
-        <Text style={residentReportDetailsStyles.value}>{report.description}</Text>
+        <Text style={residentReportDetailsStyles.value} numberOfLines={descriptionExpanded ? undefined : 3}>
+          {report.description}
+        </Text>
+        {String(report.description || "").trim().length > 120 ? (
+          <Pressable onPress={() => setDescriptionExpanded((current) => !current)}>
+            <Text style={residentReportDetailsStyles.seeMoreText}>{descriptionExpanded ? "See less" : "See more"}</Text>
+          </Pressable>
+        ) : null}
         <Text style={residentReportDetailsStyles.label}>Purok</Text>
         <Text style={residentReportDetailsStyles.value}>{report.purok}</Text>
         <Text style={residentReportDetailsStyles.label}>Location</Text>
@@ -61,7 +76,14 @@ export default function ResidentReportDetailsScreen({ route, navigation }) {
       </View>
       <FeedbackThread feedback={report.adminFeedback} replies={report.residentReplies} />
       <View style={residentReportDetailsStyles.card}>
-        <FormField label="Reply to Admin Feedback" value={replyText} onChangeText={setReplyText} placeholder="Type your reply here" multiline />
+        <FormField
+          label="Reply to Admin Feedback"
+          value={replyText}
+          onChangeText={setReplyText}
+          placeholder="Type your reply here"
+          multiline
+          onFocus={focusReplyInput}
+        />
         <Pressable style={residentReportDetailsStyles.primaryButton} onPress={handleReply}>
           <Text style={residentReportDetailsStyles.primaryButtonText}>Send Reply</Text>
         </Pressable>

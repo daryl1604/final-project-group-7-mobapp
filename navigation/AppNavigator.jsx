@@ -10,12 +10,13 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  InteractionManager,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getNavigationTheme } from "../constants/theme";
 import ForgotPasswordScreen from "../screens/Auth/ForgotPasswordScreen";
@@ -42,6 +43,7 @@ import ResidentProfileScreen from "../screens/Resident/ResidentProfileScreen";
 import ResidentReportDetailsScreen from "../screens/Resident/ResidentReportDetailsScreen";
 import SubmitReportScreen from "../screens/Resident/SubmitReportScreen";
 import { useApp } from "../storage/AppProvider";
+import { addNotificationResponseListener, getLastNotificationResponse } from "../utils/notificationUtils";
 
 const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -102,18 +104,25 @@ function createTabOptions(theme, insets, iconMap) {
     },
     tabBarIcon: ({ color, focused }) => (
       <View style={[styles.tabIconWrap, focused ? { backgroundColor: theme.primarySoft } : null]}>
-        <Ionicons name={iconMap[route.name]} size={20} color={color} />
+        <Ionicons
+          name={iconMap[route.name]}
+          size={route.name === "AdminProfile" || route.name === "ResidentProfile" ? 24 : 20}
+          color={color}
+        />
       </View>
     ),
   });
 }
 
 function SideMenuOverlay() {
-  const { currentUser, logout, theme, drawerOpen, openDrawer, closeDrawer } = useApp();
+  const { currentUser, logout, theme, drawerOpen, closeDrawer } = useApp();
   const insets = useSafeAreaInsets();
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+  const manageRotate = useRef(new Animated.Value(0)).current;
+  const navigationTimeoutRef = useRef(null);
   const isAdmin = currentUser?.role === "admin";
   const drawerPalette = getDrawerPalette(theme, isAdmin);
+  const [manageMenuOpen, setManageMenuOpen] = useState(false);
 
   useEffect(() => {
     Animated.timing(translateX, {
@@ -122,6 +131,22 @@ function SideMenuOverlay() {
       useNativeDriver: true,
     }).start();
   }, [drawerOpen, translateX]);
+
+  useEffect(() => {
+    Animated.timing(manageRotate, {
+      toValue: manageMenuOpen ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [manageMenuOpen, manageRotate]);
+
+  useEffect(() => {
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const role = currentUser?.role;
   const initials = currentUser?.fullName
@@ -133,12 +158,40 @@ function SideMenuOverlay() {
   const displayName = (currentUser?.fullName || "Barangay User").toUpperCase();
   const displayEmail = (currentUser?.email || "No email available").toLowerCase();
 
-  const navigateTo = (target) => {
-    closeDrawer();
-    if (navigationRef.isReady()) {
-      navigationRef.navigate(target);
+  const closeDrawerThen = (callback) => {
+    if (navigationTimeoutRef.current) {
+      clearTimeout(navigationTimeoutRef.current);
     }
+
+    setManageMenuOpen(false);
+    closeDrawer();
+
+    navigationTimeoutRef.current = setTimeout(() => {
+      InteractionManager.runAfterInteractions(() => {
+        callback();
+      });
+    }, 220);
   };
+
+  const navigateTo = (target) => {
+    closeDrawerThen(() => {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate(target);
+      }
+    });
+  };
+
+  const navigateToManageAction = (screen) => {
+    closeDrawerThen(() => {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate(screen);
+      }
+    });
+  };
+
+  const getDrawerPressableStyle = () => styles.drawerItem;
+
+  const getDrawerSubmenuPressableStyle = () => styles.drawerSubmenuItem;
 
   return (
     <>
@@ -177,14 +230,63 @@ function SideMenuOverlay() {
               <View style={[styles.drawerDivider, { backgroundColor: drawerPalette.divider }]} />
 
               <View style={styles.drawerSection}>
-                <Pressable style={styles.drawerItem} onPress={() => navigateTo(role === "admin" ? "AdminProfileDrawer" : "ResidentProfileDrawer")}>
-                  <View style={styles.drawerIconWrap}>
-                    <Ionicons name="person-circle-outline" size={20} color={drawerPalette.icon} />
+                {isAdmin ? (
+                  <View>
+                    <Pressable
+                      android_ripple={{ color: "transparent" }}
+                      style={getDrawerPressableStyle}
+                      onPress={() => setManageMenuOpen((current) => !current)}
+                    >
+                      <View style={styles.drawerIconWrap}>
+                        <Ionicons name="construct-outline" size={20} color={drawerPalette.icon} />
+                      </View>
+                      <Text style={[styles.drawerItemLabel, { color: drawerPalette.text }]}>Manage</Text>
+                      <Animated.View
+                        style={{
+                          transform: [
+                            {
+                              rotate: manageRotate.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ["0deg", "90deg"],
+                              }),
+                            },
+                          ],
+                        }}
+                      >
+                        <Ionicons name="chevron-forward" size={18} color={drawerPalette.chevron} />
+                      </Animated.View>
+                    </Pressable>
+                    {manageMenuOpen ? (
+                      <View style={styles.drawerSubmenu}>
+                        <Pressable
+                          android_ripple={{ color: "transparent" }}
+                          style={getDrawerSubmenuPressableStyle}
+                          onPress={() => navigateToManageAction("AddResidentAccountScreen")}
+                        >
+                          <View style={styles.drawerSubmenuContent}>
+                            <Ionicons name="person-add-outline" size={17} color={drawerPalette.icon} />
+                            <Text style={[styles.drawerSubmenuLabel, { color: drawerPalette.text }]}>Add Resident</Text>
+                          </View>
+                        </Pressable>
+                        <Pressable
+                          android_ripple={{ color: "transparent" }}
+                          style={getDrawerSubmenuPressableStyle}
+                          onPress={() => navigateToManageAction("ManageAccountsScreen")}
+                        >
+                          <View style={styles.drawerSubmenuContent}>
+                            <Ionicons name="people-outline" size={17} color={drawerPalette.icon} />
+                            <Text style={[styles.drawerSubmenuLabel, { color: drawerPalette.text }]}>Resident Accounts</Text>
+                          </View>
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
-                  <Text style={[styles.drawerItemLabel, { color: drawerPalette.text }]}>View Profile</Text>
-                  <Ionicons name="chevron-forward" size={18} color={drawerPalette.chevron} />
-                </Pressable>
-                <Pressable style={styles.drawerItem} onPress={() => navigateTo("Settings")}>
+                ) : null}
+                <Pressable
+                  android_ripple={{ color: "transparent" }}
+                  style={getDrawerPressableStyle}
+                  onPress={() => navigateTo("Settings")}
+                >
                   <View style={styles.drawerIconWrap}>
                     <Ionicons name="settings-outline" size={20} color={drawerPalette.icon} />
                   </View>
@@ -196,14 +298,22 @@ function SideMenuOverlay() {
               <View style={[styles.drawerDivider, { backgroundColor: drawerPalette.divider }]} />
 
               <View style={styles.drawerSection}>
-                <Pressable style={styles.drawerItem} onPress={() => navigateTo("Help")}>
+                <Pressable
+                  android_ripple={{ color: "transparent" }}
+                  style={getDrawerPressableStyle}
+                  onPress={() => navigateTo("Help")}
+                >
                   <View style={styles.drawerIconWrap}>
                     <Ionicons name="help-circle-outline" size={20} color={drawerPalette.icon} />
                   </View>
                   <Text style={[styles.drawerItemLabel, { color: drawerPalette.text }]}>Help</Text>
                   <Ionicons name="chevron-forward" size={18} color={drawerPalette.chevron} />
                 </Pressable>
-                <Pressable style={styles.drawerItem} onPress={() => navigateTo("About")}>
+                <Pressable
+                  android_ripple={{ color: "transparent" }}
+                  style={getDrawerPressableStyle}
+                  onPress={() => navigateTo("About")}
+                >
                   <View style={styles.drawerIconWrap}>
                     <Ionicons name="information-circle-outline" size={20} color={drawerPalette.icon} />
                   </View>
@@ -216,7 +326,8 @@ function SideMenuOverlay() {
 
               <View style={styles.drawerSection}>
                 <Pressable
-                  style={styles.drawerItem}
+                  android_ripple={{ color: "transparent" }}
+                  style={getDrawerPressableStyle}
                   onPress={async () => {
                     closeDrawer();
                     await logout();
@@ -244,7 +355,12 @@ function ResidentHomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ResidentDashboardScreen" component={ResidentDashboardScreen} />
-      <Stack.Screen name="ResidentReportDetails" component={ResidentReportDetailsScreen} />
+      <Stack.Screen name="SubmitReport" component={SubmitReportScreen} />
+      <Stack.Screen
+        name="ResidentReportDetails"
+        component={ResidentReportDetailsScreen}
+        getId={({ params }) => params?.reportId}
+      />
       <Stack.Screen name="EditReport" component={EditReportScreen} />
     </Stack.Navigator>
   );
@@ -254,7 +370,11 @@ function ResidentReportsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MyReportsScreen" component={MyReportsScreen} />
-      <Stack.Screen name="ResidentReportDetails" component={ResidentReportDetailsScreen} />
+      <Stack.Screen
+        name="ResidentReportDetails"
+        component={ResidentReportDetailsScreen}
+        getId={({ params }) => params?.reportId}
+      />
       <Stack.Screen name="EditReport" component={EditReportScreen} />
     </Stack.Navigator>
   );
@@ -264,7 +384,11 @@ function AdminHomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AdminDashboardScreen" component={AdminDashboardScreen} />
-      <Stack.Screen name="AdminReportDetails" component={AdminReportDetailsScreen} />
+      <Stack.Screen
+        name="AdminReportDetails"
+        component={AdminReportDetailsScreen}
+        getId={({ params }) => params?.reportId}
+      />
     </Stack.Navigator>
   );
 }
@@ -273,7 +397,11 @@ function AdminReportsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AllReportsScreen" component={AllReportsScreen} />
-      <Stack.Screen name="AdminReportDetails" component={AdminReportDetailsScreen} />
+      <Stack.Screen
+        name="AdminReportDetails"
+        component={AdminReportDetailsScreen}
+        getId={({ params }) => params?.reportId}
+      />
     </Stack.Navigator>
   );
 }
@@ -286,47 +414,77 @@ function AdminAnalyticsStack() {
   );
 }
 
+function AdminProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AdminProfileScreen" component={AdminProfileScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function ResidentAddReportStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="SubmitReport" component={SubmitReportScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function ResidentProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ResidentProfileScreen" component={ResidentProfileScreen} />
+    </Stack.Navigator>
+  );
+}
+
 function AdminManageStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ManageReportsScreen" component={ManageReportsScreen} />
+      <Stack.Screen
+        name="AdminReportDetails"
+        component={AdminReportDetailsScreen}
+        getId={({ params }) => params?.reportId}
+      />
       <Stack.Screen name="AddResidentAccountScreen" component={AddResidentAccountScreen} />
       <Stack.Screen name="ManageAccountsScreen" component={ManageAccountsScreen} />
-      <Stack.Screen name="AdminReportDetails" component={AdminReportDetailsScreen} />
     </Stack.Navigator>
   );
 }
 
 function ResidentTabs() {
-  const { theme, unreadNotificationsCount } = useApp();
+  const { theme, visibleUnreadNotificationsCount } = useApp();
   const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
       screenOptions={createTabOptions(theme, insets, {
         ResidentHome: "grid-outline",
-        SubmitReport: "add-circle-outline",
         ResidentReports: "document-text-outline",
+        ResidentAddReport: "add-circle-outline",
         ResidentNotifications: "notifications-outline",
+        ResidentProfile: "person-circle-outline",
       })}
     >
       <Tab.Screen name="ResidentHome" component={ResidentHomeStack} options={{ title: "Dashboard" }} />
-      <Tab.Screen name="SubmitReport" component={SubmitReportScreen} options={{ title: "Submit" }} />
-      <Tab.Screen name="ResidentReports" component={ResidentReportsStack} options={{ title: "My Reports" }} />
+      <Tab.Screen name="ResidentReports" component={ResidentReportsStack} options={{ title: "Reports" }} />
+      <Tab.Screen name="ResidentAddReport" component={ResidentAddReportStack} options={{ title: "Add Report" }} />
       <Tab.Screen
         name="ResidentNotifications"
         component={ResidentNotificationsScreen}
         options={{
           title: "Alerts",
-          tabBarBadge: unreadNotificationsCount > 0 ? unreadNotificationsCount : undefined,
+          tabBarBadge: visibleUnreadNotificationsCount > 0 ? visibleUnreadNotificationsCount : undefined,
         }}
       />
+      <Tab.Screen name="ResidentProfile" component={ResidentProfileStack} options={{ title: "Profile" }} />
     </Tab.Navigator>
   );
 }
 
 function AdminTabs() {
-  const { theme, unreadNotificationsCount } = useApp();
+  const { theme, visibleUnreadNotificationsCount } = useApp();
   const insets = useSafeAreaInsets();
 
   return (
@@ -336,21 +494,25 @@ function AdminTabs() {
         AdminReports: "folder-open-outline",
         AdminAnalytics: "bar-chart-outline",
         AdminNotifications: "notifications-outline",
-        AdminManage: "people-outline",
+        AdminProfile: "person-circle-outline",
       })}
     >
       <Tab.Screen name="AdminHome" component={AdminHomeStack} options={{ title: "Dashboard" }} />
-      <Tab.Screen name="AdminReports" component={AdminReportsStack} options={{ title: "All Reports" }} />
+      <Tab.Screen
+        name="AdminReports"
+        component={AdminReportsStack}
+        options={{ title: "All Reports", popToTopOnBlur: true }}
+      />
       <Tab.Screen name="AdminAnalytics" component={AdminAnalyticsStack} options={{ title: "Analytics" }} />
       <Tab.Screen
         name="AdminNotifications"
         component={AdminNotificationsScreen}
         options={{
-          title: "Notifications",
-          tabBarBadge: unreadNotificationsCount > 0 ? unreadNotificationsCount : undefined,
+          title: "Alerts",
+          tabBarBadge: visibleUnreadNotificationsCount > 0 ? visibleUnreadNotificationsCount : undefined,
         }}
       />
-      <Tab.Screen name="AdminManage" component={AdminManageStack} options={{ title: "Manage" }} />
+      <Tab.Screen name="AdminProfile" component={AdminProfileStack} options={{ title: "Profile" }} />
     </Tab.Navigator>
   );
 }
@@ -365,7 +527,11 @@ function AdminRootStack() {
         component={AdminTabs}
         listeners={{ focus: closeDrawer }}
       />
+      <Stack.Screen name="AdminManage" component={AdminManageStack} listeners={{ focus: closeDrawer }} />
       <Stack.Screen name="AdminProfileDrawer" component={AdminProfileScreen} listeners={{ focus: closeDrawer }} />
+      <Stack.Screen name="ResidentProfileView" component={ResidentProfileScreen} listeners={{ focus: closeDrawer }} />
+      <Stack.Screen name="AddResidentAccountScreen" component={AddResidentAccountScreen} listeners={{ focus: closeDrawer }} />
+      <Stack.Screen name="ManageAccountsScreen" component={ManageAccountsScreen} listeners={{ focus: closeDrawer }} />
       <Stack.Screen name="Settings" component={SettingsScreen} listeners={{ focus: closeDrawer }} />
       <Stack.Screen name="Help" component={HelpScreen} listeners={{ focus: closeDrawer }} />
       <Stack.Screen name="About" component={AboutScreen} listeners={{ focus: closeDrawer }} />
@@ -404,12 +570,86 @@ function AuthStack() {
 
 function AppContent() {
   const { currentUser, closeDrawer } = useApp();
+  const handledResponseRef = useRef(null);
 
   useEffect(() => {
     if (!currentUser) {
       closeDrawer();
     }
   }, [closeDrawer, currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return undefined;
+    }
+
+    const openFromNotification = (response) => {
+      const data = response?.notification?.request?.content?.data || {};
+      const notificationId = data.notificationId || response?.notification?.request?.identifier;
+
+      if (notificationId && handledResponseRef.current === notificationId) {
+        return;
+      }
+
+      handledResponseRef.current = notificationId || null;
+
+      if (!navigationRef.isReady()) {
+        return;
+      }
+
+      if (data.reportId) {
+        if (currentUser.role === "admin") {
+          navigationRef.navigate("AdminTabsRoot", {
+            screen: "AdminReports",
+            params: {
+              screen: "AllReportsScreen",
+              params: {
+                selectedReportId: data.reportId,
+                selectionKey: notificationId || `${data.reportId}_${Date.now()}`,
+              },
+            },
+          });
+        } else {
+          navigationRef.navigate("ResidentTabsRoot", {
+            screen: "ResidentReports",
+            params: {
+              screen: "MyReportsScreen",
+              params: {
+                selectedReportId: data.reportId,
+                selectionKey: notificationId || `${data.reportId}_${Date.now()}`,
+              },
+            },
+          });
+        }
+        return;
+      }
+
+      navigationRef.navigate(
+        currentUser.role === "admin" ? "AdminTabsRoot" : "ResidentTabsRoot",
+        {
+          screen: currentUser.role === "admin" ? "AdminNotifications" : "ResidentNotifications",
+        }
+      );
+    };
+
+    let subscription;
+
+    addNotificationResponseListener((response) => {
+      openFromNotification(response);
+    }).then((value) => {
+      subscription = value;
+    });
+
+    getLastNotificationResponse().then((response) => {
+      if (response) {
+        openFromNotification(response);
+      }
+    });
+
+    return () => {
+      subscription?.remove?.();
+    };
+  }, [currentUser, closeDrawer]);
 
   return (
     <>
@@ -538,6 +778,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     fontSize: 13,
     fontWeight: "500",
+  },
+  drawerSubmenu: {
+    marginTop: 2,
+    marginLeft: 70,
+    paddingRight: 10,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  drawerSubmenuItem: {
+    minHeight: 42,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  drawerSubmenuContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  drawerSubmenuLabel: {
+    fontSize: 15,
+    fontWeight: "700",
   },
   drawerLogout: {
     minHeight: 56,

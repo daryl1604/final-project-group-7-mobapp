@@ -1,37 +1,314 @@
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AppHeader from "../../components/common/AppHeader";
 import ScreenContainer from "../../components/common/ScreenContainer";
-import FormField from "../../components/forms/FormField";
-import OptionSelector from "../../components/forms/OptionSelector";
-import ReportCard from "../../components/reports/ReportCard";
-import { REPORT_SORT_OPTIONS, REPORT_STATUSES } from "../../constants/appConstants";
+import { REPORT_STATUSES } from "../../constants/appConstants";
 import { useApp } from "../../storage/AppProvider";
+import { formatDate, formatTime } from "../../utils/dateUtils";
 
-export default function AllReportsScreen({ navigation }) {
+const REPORTS_PER_PAGE = 5;
+
+const SORT_OPTIONS = [
+  { label: "Newest", value: "newest", icon: "calendar-outline", tint: "#57b4ff" },
+  { label: "Oldest", value: "oldest", icon: "time-outline", tint: "#57b4ff" },
+  { label: "Status", value: "status", icon: "checkmark-circle-outline", tint: "#b56eff" },
+  { label: "Incident Type", value: "type", icon: "warning-outline", tint: "#55d88c" },
+];
+
+const PUROK_OPTIONS = [
+  { label: "All Puroks", value: "", icon: "grid-outline", tint: "#6f8eff" },
+  { label: "Purok 1", value: "Purok 1", icon: "home-outline", tint: "#6f8eff" },
+  { label: "Purok 2", value: "Purok 2", icon: "home-outline", tint: "#6f8eff" },
+  { label: "Purok 3", value: "Purok 3", icon: "home-outline", tint: "#6f8eff" },
+  { label: "Purok 4", value: "Purok 4", icon: "home-outline", tint: "#6f8eff" },
+  { label: "Purok 5", value: "Purok 5", icon: "home-outline", tint: "#6f8eff" },
+  { label: "Purok 6", value: "Purok 6", icon: "home-outline", tint: "#6f8eff" },
+];
+
+const INCIDENT_TYPE_GROUPS = [
+  {
+    label: "Common Barangay Complaints / Incidents",
+    options: [
+      { label: "Noise Complaint", value: "noise-complaint", aliases: ["Noise Complaint", "Public Disturbance"], icon: "volume-high-outline", tint: "#55d88c" },
+      { label: "Trash / Garbage Issue", value: "trash-garbage-issue", aliases: ["Trash / Garbage Issue", "Trash Complaint"], icon: "trash-outline", tint: "#55d88c" },
+      { label: "Flooding", value: "flooding", aliases: ["Flooding"], icon: "water-outline", tint: "#55d88c" },
+      { label: "Road Damage", value: "road-damage", aliases: ["Road Damage"], icon: "construct-outline", tint: "#55d88c" },
+      { label: "Broken Streetlight", value: "broken-streetlight", aliases: ["Broken Streetlight"], icon: "bulb-outline", tint: "#55d88c" },
+      { label: "Drainage Problem", value: "drainage-problem", aliases: ["Drainage Problem", "Drainage Concern"], icon: "git-network-outline", tint: "#55d88c" },
+      { label: "Illegal Parking", value: "illegal-parking", aliases: ["Illegal Parking"], icon: "car-outline", tint: "#55d88c" },
+      { label: "Vandalism", value: "vandalism", aliases: ["Vandalism"], icon: "color-wand-outline", tint: "#55d88c" },
+      { label: "Stray Animals", value: "stray-animals", aliases: ["Stray Animals"], icon: "paw-outline", tint: "#55d88c" },
+      { label: "Others", value: "other", aliases: ["Other", "Others", "Water Leak"], icon: "apps-outline", tint: "#55d88c" },
+    ],
+  },
+];
+
+const INCIDENT_FILTER_OPTIONS = [
+  { label: "All Incidents", value: "", icon: "warning-outline", tint: "#55d88c" },
+  ...INCIDENT_TYPE_GROUPS.flatMap((group) => group.options),
+];
+
+const STATUS_OPTIONS = [
+  { label: "All Status", value: "", icon: "filter-outline", tint: "#b56eff" },
+  ...REPORT_STATUSES.map((status) => {
+    if (status === "Pending") {
+      return { label: status, value: status, icon: "time-outline", tint: "#ffbf5a" };
+    }
+
+    if (status === "Ongoing") {
+      return { label: status, value: status, icon: "sync-outline", tint: "#4f83ff" };
+    }
+
+    if (status === "For Confirmation") {
+      return { label: status, value: status, icon: "checkmark-done-circle-outline", tint: "#b56eff" };
+    }
+
+    if (status === "Resolved") {
+      return { label: status, value: status, icon: "checkmark-circle-outline", tint: "#34d399" };
+    }
+
+    return { label: status, value: status, icon: "close-circle-outline", tint: "#f87171" };
+  }),
+];
+
+function normalizeText(value = "") {
+  return value.trim().toLowerCase();
+}
+
+function getNormalizedIncidentType(incidentType = "") {
+  const normalized = normalizeText(incidentType);
+
+  for (const group of INCIDENT_TYPE_GROUPS) {
+    for (const option of group.options) {
+      if (option.aliases.some((alias) => normalizeText(alias) === normalized)) {
+        return option.value;
+      }
+    }
+  }
+
+  return normalized;
+}
+
+function getIncidentOption(incidentType = "") {
+  return INCIDENT_FILTER_OPTIONS.find((option) => option.value === getNormalizedIncidentType(incidentType));
+}
+
+function getDateValue(value) {
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function getStatusTone(status, theme) {
+  if (status === "Resolved") {
+    return { text: theme.success, bg: "rgba(52, 211, 153, 0.16)", border: "rgba(52, 211, 153, 0.28)" };
+  }
+
+  if (status === "Rejected") {
+    return { text: theme.danger, bg: theme.dangerSoft, border: "rgba(248, 113, 113, 0.26)" };
+  }
+
+  if (status === "For Confirmation") {
+    return { text: "#b56eff", bg: "rgba(181, 110, 255, 0.14)", border: "rgba(181, 110, 255, 0.26)" };
+  }
+
+  if (status === "Ongoing") {
+    return { text: theme.primary, bg: theme.primarySoft, border: "rgba(79, 131, 255, 0.28)" };
+  }
+
+  return { text: "#ffbf5a", bg: "rgba(255, 191, 90, 0.14)", border: "rgba(255, 191, 90, 0.24)" };
+}
+
+function getCardAccent(status, theme) {
+  return getStatusTone(status, theme).text;
+}
+
+function DropdownField({ label, value, options, onChange, placeholder, styles, theme, compact = false }) {
+  const [open, setOpen] = useState(false);
+  const selectedOption = options.find((option) => option.value === value);
+
+  return (
+    <>
+      <View style={compact ? styles.quickDropdownField : styles.dropdownField}>
+        <Text style={compact ? styles.quickDropdownLabel : styles.dropdownLabel}>{label}</Text>
+        <Pressable style={compact ? styles.quickDropdownTrigger : styles.dropdownTrigger} onPress={() => setOpen(true)}>
+          {selectedOption?.icon ? (
+            <View style={[styles.dropdownIconShell, { backgroundColor: `${selectedOption.tint || theme.primary}20` }]}>
+              <Ionicons name={selectedOption.icon} size={18} color={selectedOption.tint || theme.primary} />
+            </View>
+          ) : null}
+          <Text
+            style={[
+              compact ? styles.quickDropdownValue : styles.dropdownValue,
+              !selectedOption ? { color: theme.placeholder } : null,
+            ]}
+            numberOfLines={1}
+          >
+            {selectedOption?.label || placeholder}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color={theme.textMuted} />
+        </Pressable>
+      </View>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => null}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{label}</Text>
+              <Pressable onPress={() => setOpen(false)} hitSlop={8}>
+                <Text style={styles.modalClose}>Close</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.modalOptions}
+              contentContainerStyle={styles.modalOptionsContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {options.map((option) => {
+                const active = option.value === value;
+
+                return (
+                  <Pressable
+                    key={`${label}-${option.value || "all"}`}
+                    style={[styles.modalOption, active ? styles.modalOptionActive : null]}
+                    onPress={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <View style={[styles.modalOptionIcon, { backgroundColor: `${option.tint || theme.primary}20` }]}>
+                      <Ionicons name={option.icon || "chevron-forward"} size={16} color={option.tint || theme.primary} />
+                    </View>
+                    <Text style={[styles.modalOptionText, active ? styles.modalOptionTextActive : null]}>
+                      {option.label}
+                    </Text>
+                    {active ? <Ionicons name="checkmark" size={18} color={theme.primary} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+function Pagination({ page, totalPages, onPrevious, onNext, styles, theme }) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  return (
+    <View style={styles.pagination}>
+      <Pressable
+        style={[styles.pageButton, page === 1 ? styles.pageButtonDisabled : null]}
+        onPress={onPrevious}
+        disabled={page === 1}
+      >
+        <Ionicons name="chevron-back" size={18} color={page === 1 ? theme.textSoft : theme.textMuted} />
+        <Text style={[styles.pageButtonText, page === 1 ? styles.pageButtonTextDisabled : null]}>Previous</Text>
+      </Pressable>
+
+      <View style={styles.pageIndicator}>
+        <Text style={styles.pageIndicatorText}>{page}</Text>
+      </View>
+
+      <Pressable
+        style={[styles.pageButton, page === totalPages ? styles.pageButtonDisabled : null]}
+        onPress={onNext}
+        disabled={page === totalPages}
+      >
+        <Text style={[styles.pageButtonText, page === totalPages ? styles.pageButtonTextDisabled : null]}>Next</Text>
+        <Ionicons name="chevron-forward" size={18} color={page === totalPages ? theme.textSoft : theme.textMuted} />
+      </Pressable>
+    </View>
+  );
+}
+
+function ReportListCard({ report, onPress, navigation, styles, theme }) {
+  const statusTone = getStatusTone(report.status, theme);
+  const incidentOption = getIncidentOption(report.incidentType);
+  const accentColor = getCardAccent(report.status, theme);
+  const handleOpenResidentProfile = () => {
+    if (!report.residentId) {
+      return;
+    }
+
+    navigation.navigate("ResidentProfileView", {
+      userId: report.residentId,
+      isReadOnly: true,
+    });
+  };
+
+  return (
+    <View style={styles.reportCardShell}>
+      <View style={[styles.reportAccent, { backgroundColor: accentColor }]} />
+      <View style={styles.reportCard}>
+        <View style={styles.reportTopRow}>
+          <View style={styles.reportHeading}>
+            <View style={[styles.incidentIconWrap, { backgroundColor: `${accentColor}20` }]}>
+              <Ionicons name={incidentOption?.icon || "document-text-outline"} size={26} color={accentColor} />
+            </View>
+            <View style={styles.reportHeadingText}>
+              <Text style={styles.reportTitle}>{report.incidentType}</Text>
+              <View style={styles.identityRow}>
+                {report.residentName ? (
+                  <Pressable style={styles.namePill} onPress={handleOpenResidentProfile} disabled={!report.residentId}>
+                    <Text style={styles.namePillText}>{report.residentName}</Text>
+                  </Pressable>
+                ) : null}
+                {report.purok ? <Text style={styles.purokText}>{report.purok}</Text> : null}
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.statusPill, { backgroundColor: statusTone.bg, borderColor: statusTone.border }]}>
+            <Text style={[styles.statusPillText, { color: statusTone.text }]}>{report.status}</Text>
+          </View>
+        </View>
+
+        <View style={styles.metaChipRow}>
+          <View style={styles.metaInlineItem}>
+            <Ionicons name="calendar-outline" size={16} color={theme.textSoft} />
+            <Text style={styles.metaInlineText}>{formatDate(report.createdAt)}</Text>
+          </View>
+          <View style={styles.metaInlineItem}>
+            <Ionicons name="time-outline" size={16} color={theme.textSoft} />
+            <Text style={styles.metaInlineText}>{formatTime(report.createdAt)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.locationInlineRow}>
+          <Ionicons name="location-outline" size={18} color={theme.primary} />
+          <Text style={styles.locationText} numberOfLines={1}>
+            {report.location?.address || "Location unavailable"}
+          </Text>
+        </View>
+
+        <View style={styles.cardFooter}>
+          <Pressable style={styles.viewReportButton} onPress={onPress}>
+            <Text style={styles.viewReportButtonText}>View Report</Text>
+            <Ionicons name="arrow-forward" size={16} color={theme.primary} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export default function AllReportsScreen({ navigation, route }) {
   const { reports, theme } = useApp();
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [statusFilter, setStatusFilter] = useState("");
   const [incidentFilter, setIncidentFilter] = useState("");
   const [purokFilter, setPurokFilter] = useState("");
+  const [page, setPage] = useState(1);
   const styles = createStyles(theme);
-
-  const incidentOptions = useMemo(
-    () => [
-      { label: "All incidents", value: "" },
-      ...[...new Set(reports.map((item) => item.incidentType))].map((item) => ({ label: item, value: item })),
-    ],
-    [reports]
-  );
-
-  const purokOptions = useMemo(
-    () => [
-      { label: "All puroks", value: "" },
-      ...[...new Set(reports.map((item) => item.purok))].map((item) => ({ label: item, value: item })),
-    ],
-    [reports]
-  );
+  const handledSelectionRef = useRef(null);
 
   const filteredReports = useMemo(() => {
     const searchValue = search.trim().toLowerCase();
@@ -41,7 +318,7 @@ export default function AllReportsScreen({ navigation }) {
         return false;
       }
 
-      if (incidentFilter && report.incidentType !== incidentFilter) {
+      if (incidentFilter && getNormalizedIncidentType(report.incidentType) !== incidentFilter) {
         return false;
       }
 
@@ -68,7 +345,7 @@ export default function AllReportsScreen({ navigation }) {
     });
 
     if (sortBy === "oldest") {
-      return [...nextItems].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      return [...nextItems].sort((a, b) => getDateValue(a.createdAt) - getDateValue(b.createdAt));
     }
 
     if (sortBy === "status") {
@@ -76,54 +353,127 @@ export default function AllReportsScreen({ navigation }) {
     }
 
     if (sortBy === "type") {
-      return [...nextItems].sort((a, b) => a.incidentType.localeCompare(b.incidentType));
+      return [...nextItems].sort((a, b) => {
+        const typeA = getIncidentOption(a.incidentType)?.label || a.incidentType;
+        const typeB = getIncidentOption(b.incidentType)?.label || b.incidentType;
+        return typeA.localeCompare(typeB);
+      });
     }
 
-    return [...nextItems].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return [...nextItems].sort((a, b) => getDateValue(b.createdAt) - getDateValue(a.createdAt));
   }, [incidentFilter, purokFilter, reports, search, sortBy, statusFilter]);
 
-  const resetFilters = () => {
-    setSearch("");
-    setSortBy("newest");
-    setStatusFilter("");
-    setIncidentFilter("");
-    setPurokFilter("");
-  };
+  const totalPages = Math.max(1, Math.ceil(filteredReports.length / REPORTS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedReports = useMemo(() => {
+    const start = (currentPage - 1) * REPORTS_PER_PAGE;
+    return filteredReports.slice(start, start + REPORTS_PER_PAGE);
+  }, [currentPage, filteredReports]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, sortBy, statusFilter, incidentFilter, purokFilter]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    const selectedReportId = route?.params?.selectedReportId;
+    const selectionKey = route?.params?.selectionKey;
+
+    if (!selectedReportId || !selectionKey || handledSelectionRef.current === selectionKey) {
+      return;
+    }
+
+    handledSelectionRef.current = selectionKey;
+    navigation.navigate("AdminReportDetails", { reportId: selectedReportId });
+  }, [navigation, route?.params?.selectedReportId, route?.params?.selectionKey]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        handledSelectionRef.current = null;
+        if (route?.params?.selectedReportId || route?.params?.selectionKey) {
+          navigation.setParams({
+            selectedReportId: undefined,
+            selectionKey: undefined,
+          });
+        }
+      };
+    }, [navigation, route?.params?.selectedReportId, route?.params?.selectionKey])
+  );
 
   return (
     <ScreenContainer keyboardShouldPersistTaps="handled">
       <AppHeader title="Reports" variant="toolbar" />
 
-      <View style={styles.filterCard}>
-        <FormField
-          label="Search reports"
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search resident name, purok, incident, or details"
+      <View style={styles.searchField}>
+        <View style={styles.searchInputWrap}>
+          <Ionicons name="search-outline" size={22} color={theme.textSoft} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search resident name, purok, incident, or details"
+            placeholderTextColor={theme.placeholder}
+            style={styles.searchInput}
+          />
+        </View>
+      </View>
+
+      <View style={styles.filterGrid}>
+        <DropdownField
+          label="Sort by"
+          value={sortBy}
+          onChange={setSortBy}
+          options={SORT_OPTIONS}
+          placeholder="Select sorting"
+          styles={styles}
+          theme={theme}
+          compact
         />
-        <OptionSelector label="Sort by" value={sortBy} onChange={setSortBy} options={REPORT_SORT_OPTIONS} />
-        <OptionSelector
+        <DropdownField
           label="Status"
           value={statusFilter}
           onChange={setStatusFilter}
-          options={[{ label: "All status", value: "" }, ...REPORT_STATUSES.map((status) => ({ label: status, value: status }))]}
+          options={STATUS_OPTIONS}
+          placeholder="Choose status"
+          styles={styles}
+          theme={theme}
+          compact
         />
-        <OptionSelector label="Incident type" value={incidentFilter} onChange={setIncidentFilter} options={incidentOptions} />
-        <OptionSelector label="Purok" value={purokFilter} onChange={setPurokFilter} options={purokOptions} />
-        <Pressable style={styles.resetButton} onPress={resetFilters}>
-          <Text style={styles.resetButtonText}>Reset filters</Text>
-        </Pressable>
+        <DropdownField
+          label="Incident Type"
+          value={incidentFilter}
+          onChange={setIncidentFilter}
+          options={INCIDENT_FILTER_OPTIONS}
+          placeholder="Choose incident type"
+          styles={styles}
+          theme={theme}
+          compact
+        />
+        <DropdownField
+          label="Purok"
+          value={purokFilter}
+          onChange={setPurokFilter}
+          options={PUROK_OPTIONS}
+          placeholder="Choose purok"
+          styles={styles}
+          theme={theme}
+          compact
+        />
       </View>
 
-      <View style={styles.resultHeader}>
-        <Text style={styles.resultTitle}>{filteredReports.length} matching report{filteredReports.length === 1 ? "" : "s"}</Text>
-      </View>
-
-      {filteredReports.map((report) => (
-        <ReportCard
+      {paginatedReports.map((report) => (
+        <ReportListCard
           key={report.id}
           report={report}
           onPress={() => navigation.navigate("AdminReportDetails", { reportId: report.id })}
+          navigation={navigation}
+          styles={styles}
+          theme={theme}
         />
       ))}
 
@@ -132,40 +482,366 @@ export default function AllReportsScreen({ navigation }) {
           <Text style={styles.emptyTitle}>No reports found</Text>
           <Text style={styles.emptyText}>Try changing the search terms or clearing the active filters.</Text>
         </View>
-      ) : null}
+      ) : (
+        <Pagination
+          page={currentPage}
+          totalPages={totalPages}
+          onPrevious={() => setPage((value) => Math.max(1, value - 1))}
+          onNext={() => setPage((value) => Math.min(totalPages, value + 1))}
+          styles={styles}
+          theme={theme}
+        />
+      )}
     </ScreenContainer>
   );
 }
 
 function createStyles(theme) {
   return StyleSheet.create({
-    filterCard: {
+    searchField: {
+      width: "100%",
+    },
+    searchInputWrap: {
+      minHeight: 62,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: "rgba(79, 131, 255, 0.28)",
+      backgroundColor: theme.inputBackground,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 18,
+    },
+    searchInput: {
+      flex: 1,
+      color: theme.inputText,
+      fontSize: 15,
+      fontWeight: "600",
+      paddingVertical: 0,
+    },
+    filterGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+    },
+    dropdownField: {
+      flexBasis: "48%",
+      flexGrow: 1,
+      gap: 8,
+    },
+    quickDropdownField: {
+      minWidth: 150,
+      flexGrow: 1,
+      flexBasis: "47%",
+      gap: 6,
+    },
+    dropdownLabel: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    quickDropdownLabel: {
+      color: theme.textMuted,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    dropdownTrigger: {
+      minHeight: 70,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBackground,
+      paddingHorizontal: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    quickDropdownTrigger: {
+      minHeight: 48,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: "transparent",
+      paddingHorizontal: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    dropdownIconShell: {
+      width: 38,
+      height: 38,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    dropdownValue: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    quickDropdownValue: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.56)",
+      justifyContent: "center",
+      padding: 20,
+    },
+    modalSheet: {
       backgroundColor: theme.surface,
-      borderRadius: 24,
+      borderRadius: 26,
       borderWidth: 1,
       borderColor: theme.border,
       padding: 16,
       gap: 14,
+      maxHeight: "80%",
     },
-    resetButton: {
-      alignSelf: "flex-start",
-      backgroundColor: theme.primarySoft,
-      borderRadius: 14,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
     },
-    resetButtonText: {
+    modalTitle: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: "800",
+    },
+    modalClose: {
       color: theme.primary,
       fontSize: 13,
       fontWeight: "800",
     },
-    resultHeader: {
-      paddingHorizontal: 2,
+    modalOptions: {
+      flexGrow: 0,
     },
-    resultTitle: {
+    modalOptionsContent: {
+      gap: 8,
+    },
+    modalOption: {
+      minHeight: 50,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBackground,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    modalOptionActive: {
+      backgroundColor: theme.primarySoft,
+      borderColor: theme.primary,
+    },
+    modalOptionIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalOptionText: {
+      flex: 1,
       color: theme.text,
-      fontSize: 15,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    modalOptionTextActive: {
+      color: theme.primary,
+    },
+    reportCardShell: {
+      flexDirection: "row",
+      borderRadius: 28,
+      overflow: "hidden",
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      shadowColor: theme.shadowStrong,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.22,
+      shadowRadius: 20,
+      elevation: 6,
+    },
+    reportAccent: {
+      width: 3,
+      opacity: 0.72,
+    },
+    reportCard: {
+      flex: 1,
+      padding: 18,
+      gap: 10,
+      backgroundColor: theme.surface,
+    },
+    reportTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    reportHeading: {
+      flexDirection: "row",
+      gap: 14,
+      flex: 1,
+    },
+    incidentIconWrap: {
+      width: 64,
+      height: 64,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    reportHeadingText: {
+      flex: 1,
+      gap: 6,
+      paddingTop: 2,
+    },
+    reportTitle: {
+      color: theme.text,
+      fontSize: 17,
+      fontWeight: "900",
+    },
+    identityRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: 10,
+    },
+    namePill: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 14,
+      backgroundColor: theme.primarySoft,
+      borderWidth: 1,
+      borderColor: "rgba(79, 131, 255, 0.24)",
+    },
+    namePillText: {
+      color: theme.primary,
+      fontSize: 13,
       fontWeight: "800",
+    },
+    purokText: {
+      color: theme.textMuted,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    statusPill: {
+      minHeight: 34,
+      paddingHorizontal: 14,
+      borderRadius: 16,
+      justifyContent: "center",
+      borderWidth: 1,
+      alignSelf: "flex-start",
+    },
+    statusPillText: {
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    metaChipRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 16,
+    },
+    metaInlineItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    metaInlineText: {
+      color: theme.textMuted,
+      fontSize: 12,
+      fontWeight: "700",
+      opacity: 0.8,
+    },
+    locationInlineRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingTop: 2,
+    },
+    locationText: {
+      flex: 1,
+      color: theme.textMuted,
+      fontSize: 12,
+      fontWeight: "700",
+      opacity: 0.8,
+    },
+    cardFooter: {
+      paddingTop: 4,
+    },
+    viewReportButton: {
+      minHeight: 44,
+      width: "100%",
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBackground,
+      paddingHorizontal: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+    viewReportButtonText: {
+      color: theme.primary,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    pagination: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 16,
+      paddingTop: 6,
+      paddingBottom: 8,
+    },
+    pageButton: {
+      minHeight: 48,
+      minWidth: 118,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingHorizontal: 14,
+    },
+    pageButtonDisabled: {
+      opacity: 0.5,
+    },
+    pageButtonText: {
+      color: theme.textMuted,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    pageButtonTextDisabled: {
+      color: theme.textSoft,
+    },
+    pageIndicator: {
+      width: 48,
+      height: 48,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.primarySoft,
+      borderWidth: 1,
+      borderColor: "rgba(79, 131, 255, 0.36)",
+    },
+    pageIndicatorText: {
+      color: theme.primary,
+      fontSize: 16,
+      fontWeight: "900",
     },
     emptyState: {
       backgroundColor: theme.surface,

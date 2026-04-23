@@ -39,6 +39,11 @@ export function createFeedbackThreadStyles(theme) {
       fontSize: 14,
       lineHeight: 21,
     },
+    toggleText: {
+      color: theme.primary,
+      fontSize: 13,
+      fontWeight: "800",
+    },
     cardMeta: {
       color: theme.textSoft,
       fontSize: 12,

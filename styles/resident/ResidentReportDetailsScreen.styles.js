@@ -29,6 +29,11 @@ export function createResidentReportDetailsStyles(theme) {
       fontSize: 15,
       lineHeight: 22,
     },
+    seeMoreText: {
+      color: theme.primary,
+      fontSize: 13,
+      fontWeight: "800",
+    },
     primaryButton: {
       backgroundColor: theme.primary,
       borderRadius: 16,

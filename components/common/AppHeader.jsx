@@ -11,16 +11,29 @@ export default function AppHeader({
   rightContent,
   showMenu = true,
   variant = "default",
+  preferBackButton = false,
+  leftIconName,
+  onLeftPress,
 }) {
   const { theme, openDrawer } = useApp();
   const navigation = useNavigation();
   const styles = createAppHeaderStyles(theme);
   const isToolbar = variant === "toolbar";
-  const shouldUseBackButton = ["Settings", "Help", "About", "Profile", "View Profile"].includes(title);
-  const leftIconName = shouldUseBackButton ? "arrow-back-outline" : "menu-outline";
-  const handleLeftPress = shouldUseBackButton && navigation.canGoBack()
+  const shouldUseBackButton = preferBackButton || [
+    "Settings",
+    "Help",
+    "About",
+    "Profile",
+    "View Profile",
+    "Add Resident",
+    "Manage Accounts",
+    "Resident Accounts",
+    "New Message",
+  ].includes(title);
+  const resolvedLeftIconName = leftIconName || (shouldUseBackButton ? "arrow-back-outline" : "menu-outline");
+  const handleLeftPress = onLeftPress || (shouldUseBackButton && navigation.canGoBack()
     ? () => navigation.goBack()
-    : openDrawer;
+    : openDrawer);
 
   const menuButton = (
     <Pressable
@@ -30,7 +43,7 @@ export default function AppHeader({
       ]}
       onPress={handleLeftPress}
     >
-      <Ionicons name={leftIconName} size={22} color={theme.text} />
+      <Ionicons name={resolvedLeftIconName} size={22} color={theme.text} />
     </Pressable>
   );
 
@@ -41,7 +54,7 @@ export default function AppHeader({
         <View style={styles.textBlock}>
           <Text style={[styles.title, isToolbar ? styles.toolbarTitle : null]}>{title}</Text>
         </View>
-        {!isToolbar && rightContent ? <View>{rightContent}</View> : null}
+        {rightContent ? <View>{rightContent}</View> : null}
       </View>
     </View>
   );

@@ -20,7 +20,7 @@ import {
 
 const AppContext = createContext(null);
 
-function createNotification(userId, title, message, type = "info", reportId = null) {
+function createNotification(userId, title, message, type = "info", reportId = null, residentId = null) {
   return {
     id: createId("notif"),
     userId,
@@ -29,6 +29,7 @@ function createNotification(userId, title, message, type = "info", reportId = nu
     type,
     read: false,
     reportId,
+    residentId,
     createdAt: new Date().toISOString(),
   };
 }
@@ -69,16 +70,11 @@ export function AppProvider({ children }) {
   const theme = authThemes[preferences.themeMode] || authThemes.light;
 
   const persistState = async (nextState, newNotifications = []) => {
-    const shouldSuppressNotifications = !preferences.notificationsEnabled && newNotifications.length > 0;
-    const blockedNotificationIds = new Set(
-      shouldSuppressNotifications ? newNotifications.map((item) => item.id) : []
-    );
-    const persistedNotifications = blockedNotificationIds.size > 0
-      ? nextState.notifications.filter((item) => !blockedNotificationIds.has(item.id))
-      : nextState.notifications;
+    const nextNotifications = nextState.notifications ?? notifications;
     const persistedState = {
-      ...nextState,
-      notifications: persistedNotifications,
+      accounts: nextState.accounts ?? accounts,
+      reports: nextState.reports ?? reports,
+      notifications: nextNotifications,
     };
 
     await saveAppStorage(persistedState);
@@ -181,11 +177,29 @@ export function AppProvider({ children }) {
           return;
         }
 
+        let nextPreferences = storedPreferences;
+
+        if (storedPreferences.notificationsPermission === "undetermined") {
+          const permission = await requestNotificationAccess();
+          nextPreferences = {
+            ...storedPreferences,
+            notificationsEnabled: permission.granted || storedPreferences.notificationsEnabled,
+            notificationsPermission: permission.status,
+          };
+          await savePreferences(nextPreferences);
+        } else if (storedPreferences.notificationsPermission === "granted" && !storedPreferences.notificationsEnabled) {
+          nextPreferences = {
+            ...storedPreferences,
+            notificationsEnabled: true,
+          };
+          await savePreferences(nextPreferences);
+        }
+
         setAccounts(seededData.accounts);
         setReports(seededData.reports);
         setNotifications(seededData.notifications);
         setSessionUser(storedSession);
-        setPreferences(storedPreferences);
+        setPreferences(nextPreferences);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -206,17 +220,18 @@ export function AppProvider({ children }) {
   );
 
   const currentNotifications = useMemo(
-    () => (
-      preferences.notificationsEnabled
-        ? sortByLatest(notifications.filter((item) => item.userId === currentUser?.id))
-        : []
-    ),
-    [currentUser?.id, notifications, preferences.notificationsEnabled]
+    () => sortByLatest(notifications.filter((item) => item.userId === currentUser?.id)),
+    [currentUser?.id, notifications]
   );
 
   const unreadNotificationsCount = useMemo(
     () => currentNotifications.filter((item) => !item.read).length,
     [currentNotifications]
+  );
+
+  const visibleUnreadNotificationsCount = useMemo(
+    () => (preferences.notificationsEnabled ? unreadNotificationsCount : 0),
+    [preferences.notificationsEnabled, unreadNotificationsCount]
   );
 
   const login = async (email, password) => {
@@ -270,7 +285,9 @@ export function AppProvider({ children }) {
           admin.id,
           "New Resident Registration",
           `${nextResident.fullName} completed a resident registration.`,
-          "account"
+          "account",
+          null,
+          nextResident.id
         )
       ),
     ];
@@ -677,14 +694,16 @@ export function AppProvider({ children }) {
       email: normalizedEmail,
       password: payload.password,
       purok: payload.purok,
+      address: payload.address?.trim() || "",
       contactNumber: normalizedPhone,
+      dateOfBirth: payload.dateOfBirth || "",
       createdAt: timestamp,
       updatedAt: timestamp,
     };
 
     const createdNotifications = [
       createNotification(resident.id, "Resident Account Added", "A barangay admin created your account.", "account"),
-      createNotification(adminId, "Resident Added", `${resident.fullName} has been added to the local registry.`, "account"),
+      createNotification(adminId, "Resident Added", `${resident.fullName} has been added to the local registry.`, "account", null, resident.id),
     ];
 
     await persistState(
@@ -791,6 +810,7 @@ export function AppProvider({ children }) {
     currentUser,
     currentNotifications,
     unreadNotificationsCount,
+    visibleUnreadNotificationsCount,
     login,
     signupResident,
     logout,

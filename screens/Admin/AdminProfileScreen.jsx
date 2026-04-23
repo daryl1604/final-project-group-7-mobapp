@@ -70,7 +70,7 @@ function formatRegisteredDate(value) {
 }
 
 export default function AdminProfileScreen() {
-  const { currentUser, updateProfile, changePassword, showAlert, theme, reports, unreadNotificationsCount } = useApp();
+  const { currentUser, updateProfile, changePassword, showAlert, theme, reports, unreadNotificationsCount, openDrawer } = useApp();
   const scrollRef = useRef(null);
   const { handleFieldFocus, registerInputRef } = useKeyboardAwareFieldFocus({ scrollRef });
   const [form, setForm] = useState(createInitialForm(currentUser));
@@ -312,7 +312,7 @@ export default function AdminProfileScreen() {
       keyboardShouldPersistTaps="handled"
       contentStyle={styles.screenContent}
     >
-      <AppHeader title="Profile" variant="toolbar" />
+      <AppHeader title="Profile" variant="toolbar" leftIconName="menu-outline" onLeftPress={openDrawer} />
 
       <View style={styles.profileHero}>
         <View style={styles.avatarShell}>
@@ -636,7 +636,7 @@ export default function AdminProfileScreen() {
 function createStyles(theme) {
   return StyleSheet.create({
     screenContent: {
-      paddingBottom: 28,
+      paddingBottom: 156,
     },
     profileHero: {
       backgroundColor: theme.surface,
