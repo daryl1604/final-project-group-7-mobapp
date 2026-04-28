@@ -16,7 +16,9 @@ export default function StatusBadge({ status }) {
         },
       ]}
     >
-      <Text style={[styles.text, { color: STATUS_COLORS[status] || "#64748b" }]}>{status}</Text>
+      <Text style={[styles.text, { color: STATUS_COLORS[status] || "#64748b" }]} numberOfLines={1}>
+        {status}
+      </Text>
     </View>
   );
 }

@@ -174,7 +174,7 @@ export default function LoginScreen({ navigation }) {
                 <Text style={loginScreenStyles.rememberLabel}>Remember Me</Text>
               </Pressable>
 
-              <Pressable onPress={() => navigation.replace("ForgotPassword")} android_ripple={{ color: "transparent" }}>
+              <Pressable onPress={() => navigation.navigate("ForgotPassword")} android_ripple={{ color: "transparent" }}>
                 <Text style={loginScreenStyles.forgotLink}>Forgot Password?</Text>
               </Pressable>
             </View>
@@ -183,14 +183,14 @@ export default function LoginScreen({ navigation }) {
 
             <View style={loginScreenStyles.footerRow}>
               <Text style={loginScreenStyles.footerText}>Don&apos;t have an account?</Text>
-              <Pressable onPress={() => navigation.replace("Signup")} android_ripple={{ color: "transparent" }}>
+              <Pressable onPress={() => navigation.navigate("Signup")} android_ripple={{ color: "transparent" }}>
                 <Text style={loginScreenStyles.footerLink}>Create Account</Text>
               </Pressable>
             </View>
 
             <Pressable
               style={loginScreenStyles.secondaryAction}
-              onPress={() => navigation.replace("Welcome")}
+              onPress={() => navigation.navigate("Welcome")}
               android_ripple={{ color: "transparent" }}
             >
               <Text style={loginScreenStyles.secondaryLink}>Go to Welcome Screen</Text>

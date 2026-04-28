@@ -72,6 +72,22 @@ export default function useKeyboardAwareFieldFocus({
     []
   );
 
+  const focusField = useCallback(
+    (field) => {
+      const input = inputRefs.current[field];
+
+      if (!input) {
+        return false;
+      }
+
+      activeFieldRef.current = field;
+      input.focus?.();
+      scheduleScrollToField(field);
+      return true;
+    },
+    [scheduleScrollToField]
+  );
+
   useEffect(() => {
     const showEventName = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEventName = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
@@ -95,6 +111,7 @@ export default function useKeyboardAwareFieldFocus({
 
   return {
     handleFieldFocus,
+    focusField,
     registerInputRef,
     scrollToField,
   };

@@ -24,18 +24,21 @@ export function createReportCardStyles(theme) {
     titleGroup: {
       flex: 1,
       gap: 6,
+      minWidth: 0,
     },
     title: {
       color: theme.text,
       fontSize: 18,
       fontWeight: "800",
       lineHeight: 24,
+      flexShrink: 1,
     },
     metaRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
+      flexWrap: "nowrap",
       alignItems: "center",
       gap: 8,
+      minWidth: 0,
     },
     metaPill: {
       color: theme.primary,
@@ -45,12 +48,16 @@ export function createReportCardStyles(theme) {
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 999,
+      flexShrink: 1,
+      maxWidth: "72%",
+      overflow: "hidden",
     },
     meta: {
       color: theme.textMuted,
       fontSize: 13,
       lineHeight: 18,
       fontWeight: "600",
+      flexShrink: 0,
     },
     description: {
       color: theme.text,

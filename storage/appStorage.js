@@ -13,28 +13,6 @@ const defaultPreferences = {
   notificationsPermission: "undetermined",
 };
 
-function mergeSeedAccounts(existingAccounts = []) {
-  const nextAccounts = [...existingAccounts];
-
-  seedAccounts.forEach((seedAccount) => {
-    const matchIndex = nextAccounts.findIndex(
-      (account) => account.id === seedAccount.id || account.email?.trim().toLowerCase() === seedAccount.email.trim().toLowerCase()
-    );
-
-    if (matchIndex >= 0) {
-      nextAccounts[matchIndex] = {
-        ...nextAccounts[matchIndex],
-        ...seedAccount,
-      };
-      return;
-    }
-
-    nextAccounts.push(seedAccount);
-  });
-
-  return nextAccounts;
-}
-
 function migrateAccounts(accounts = []) {
   const fallbackTimestamp = new Date().toISOString();
 
@@ -54,7 +32,9 @@ export async function bootstrapAppStorage() {
 
   if (data) {
     const mergedData = {
-      accounts: migrateAccounts(mergeSeedAccounts(data.accounts)),
+      // Preserve the user's saved account list exactly as stored so deleted demo
+      // residents do not get re-added on every app launch.
+      accounts: migrateAccounts(Array.isArray(data.accounts) ? data.accounts : []),
       reports: Array.isArray(data.reports) ? data.reports : seedReports,
       notifications: Array.isArray(data.notifications) ? data.notifications : seedNotifications,
     };

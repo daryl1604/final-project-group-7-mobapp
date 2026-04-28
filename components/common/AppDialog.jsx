@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useApp } from "../../storage/AppProvider";
 
@@ -56,6 +57,11 @@ export default function AppDialog() {
           }}
         />
         <View style={styles.card}>
+          {dialogConfig.dismissible !== false ? (
+            <Pressable style={styles.closeButton} onPress={hideDialog} hitSlop={10}>
+              <Ionicons name="close" size={20} color={theme.textMuted} />
+            </Pressable>
+          ) : null}
           <View style={styles.iconWrap}>
             <View style={styles.iconDot} />
           </View>
@@ -108,6 +114,7 @@ function createStyles(theme, tone) {
       paddingHorizontal: 24,
     },
     card: {
+      position: "relative",
       width: "100%",
       maxWidth: 380,
       backgroundColor: theme.surface,
@@ -121,6 +128,20 @@ function createStyles(theme, tone) {
       shadowOpacity: 0.16,
       shadowRadius: 28,
       elevation: 10,
+    },
+    closeButton: {
+      position: "absolute",
+      top: 16,
+      right: 16,
+      zIndex: 2,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.surfaceSoft,
+      borderWidth: 1,
+      borderColor: theme.border,
+      alignItems: "center",
+      justifyContent: "center",
     },
     iconWrap: {
       width: 42,
@@ -152,16 +173,20 @@ function createStyles(theme, tone) {
     },
     actionRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: 12,
     },
     actionButton: {
-      flex: 1,
-      minHeight: 50,
+      minHeight: 52,
       borderRadius: 18,
       alignItems: "center",
       justifyContent: "center",
-      paddingHorizontal: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
       borderWidth: 1,
+      flexGrow: 1,
+      flexBasis: "30%",
+      minWidth: 110,
     },
     actionButtonPrimary: {
       backgroundColor: theme.primary,
@@ -178,6 +203,7 @@ function createStyles(theme, tone) {
     actionText: {
       fontSize: 14,
       fontWeight: "800",
+      textAlign: "center",
     },
     actionTextPrimary: {
       color: "#ffffff",

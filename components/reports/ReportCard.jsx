@@ -13,10 +13,18 @@ export default function ReportCard({ report, onPress, footer }) {
     <Pressable style={styles.card} onPress={onPress}>
       <View style={styles.header}>
         <View style={styles.titleGroup}>
-          <Text style={styles.title}>{report.incidentType}</Text>
+          <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
+            {report.incidentType}
+          </Text>
           <View style={styles.metaRow}>
-            {report.residentName ? <Text style={styles.metaPill}>{report.residentName}</Text> : null}
-            <Text style={styles.meta}>{report.purok}</Text>
+            {report.residentName ? (
+              <Text style={styles.metaPill} numberOfLines={1} ellipsizeMode="tail">
+                {report.residentName}
+              </Text>
+            ) : null}
+            <Text style={styles.meta} numberOfLines={1}>
+              {report.purok}
+            </Text>
           </View>
         </View>
         <StatusBadge status={report.status} />

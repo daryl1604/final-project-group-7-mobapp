@@ -24,6 +24,7 @@ import {
   validateEmail,
   validateFullName,
   isSamePassword,
+  validateMinimumAge,
   validatePassword,
   validatePhoneNumber,
 } from "../../utils/authValidation";
@@ -32,15 +33,19 @@ const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
 const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 function createInitialForm(user) {
+  const dateOfBirth = user?.dateOfBirth || "";
+  const derivedAge = calculateAgeFromDob(dateOfBirth);
+  const ageValue = user?.age === 0 || user?.age ? String(user.age) : derivedAge;
+
   return {
     fullName: user?.fullName || "",
     email: user?.email || "",
     contactNumber: user?.contactNumber || "",
     purok: user?.purok || PUROK_OPTIONS[0],
     address: user?.address || "",
-    dateOfBirth: user?.dateOfBirth || "",
-    gender: user?.gender || "",
-    age: user?.age === 0 || user?.age ? String(user.age) : "",
+    dateOfBirth,
+    gender: user?.gender || "Prefer not to say",
+    age: ageValue || "",
     photoUri: user?.photoUri || "",
     bio: user?.bio || "",
   };
@@ -95,6 +100,21 @@ function getInitials(fullName = "") {
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "BR";
 }
 
+function normalizeProfileForm(form) {
+  return {
+    fullName: String(form?.fullName || "").trim(),
+    email: String(form?.email || "").trim().toLowerCase(),
+    contactNumber: String(form?.contactNumber || "").trim(),
+    purok: String(form?.purok || "").trim(),
+    address: String(form?.address || "").trim(),
+    dateOfBirth: String(form?.dateOfBirth || "").trim(),
+    gender: String(form?.gender || "").trim(),
+    age: String(form?.age || "").trim(),
+    photoUri: String(form?.photoUri || "").trim(),
+    bio: String(form?.bio || "").trim(),
+  };
+}
+
 function isSupportedImageAsset(asset) {
   if (!asset?.uri) {
     return false;
@@ -131,13 +151,14 @@ function formatRegisteredDate(value) {
   });
 }
 
-export default function ResidentProfileScreen({ route }) {
-  const { accounts, currentUser, updateProfile, changePassword, showAlert, theme, reports, openDrawer } = useApp();
+export default function ResidentProfileScreen({ route, navigation }) {
+  const { accounts, currentUser, updateProfile, changePassword, showAlert, showConfirmation, logout, theme, reports, openDrawer } = useApp();
   const isReadOnly = Boolean(route?.params?.isReadOnly);
   const profileUser = isReadOnly
     ? accounts.find((account) => account.id === route?.params?.userId) || null
     : currentUser;
   const scrollRef = useRef(null);
+  const unavailableAlertShownRef = useRef(false);
   const { handleFieldFocus, registerInputRef } = useKeyboardAwareFieldFocus({ scrollRef });
   const [form, setForm] = useState(createInitialForm(profileUser));
   const [touched, setTouched] = useState({});
@@ -164,6 +185,7 @@ export default function ResidentProfileScreen({ route }) {
   const styles = createStyles(theme);
 
   useEffect(() => {
+    unavailableAlertShownRef.current = false;
     setForm(createInitialForm(profileUser));
     setTouched({});
     setPhotoError("");
@@ -181,6 +203,28 @@ export default function ResidentProfileScreen({ route }) {
     setEditingProfile(false);
     setEditingPassword(false);
   }, [profileUser]);
+
+  useEffect(() => {
+    if (!isReadOnly || profileUser || unavailableAlertShownRef.current) {
+      return;
+    }
+
+    unavailableAlertShownRef.current = true;
+    showAlert(
+      "Account Unavailable",
+      "This account has been deleted. You can no longer view this resident's profile.",
+      {
+        variant: "info",
+        buttons: [
+          {
+            text: "OK",
+            variant: "primary",
+            onPress: () => navigation.goBack(),
+          },
+        ],
+      }
+    );
+  }, [isReadOnly, navigation, profileUser, showAlert]);
 
   if (!profileUser) {
     return null;
@@ -221,7 +265,7 @@ export default function ResidentProfileScreen({ route }) {
         email: validateEmail(form.email),
         contactNumber: validatePhoneNumber(form.contactNumber),
         address: validateAddress(form.address),
-        dateOfBirth: validateDateOfBirth(form.dateOfBirth),
+        dateOfBirth: validateDateOfBirth(form.dateOfBirth) || validateMinimumAge(form.dateOfBirth),
         gender: validateGender(form.gender),
         age: validateAge(form.age, form.dateOfBirth),
         bio: "",
@@ -451,15 +495,29 @@ export default function ResidentProfileScreen({ route }) {
     }
   };
 
+  const handleLogout = () => {
+    showConfirmation({
+      title: "Log out?",
+      message: "Are you sure you want to log out?",
+      confirmText: "Logout",
+      onConfirm: async () => {
+        await logout();
+      },
+    });
+  };
+
   const initials = getInitials(form.fullName || profileUser?.fullName);
   const registeredDate = formatRegisteredDate(profileUser?.createdAt);
   const lastPasswordChanged = formatRegisteredDate(profileUser?.passwordUpdatedAt || profileUser?.createdAt);
   const isProfileValid = !Object.values(errors).some(Boolean);
+  const hasProfileChanges = useMemo(() => {
+    return JSON.stringify(normalizeProfileForm(form)) !== JSON.stringify(normalizeProfileForm(createInitialForm(profileUser)));
+  }, [form, profileUser]);
   const hasPasswordChanges = Boolean(
     passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmNewPassword
   );
   const isPasswordValid = !Object.values(passwordErrors).some(Boolean);
-  const canSaveProfile = isProfileValid && !saving;
+  const canSaveProfile = hasProfileChanges && isProfileValid && !saving;
   const canSavePassword = hasPasswordChanges && isPasswordValid && !saving;
 
   return (
@@ -537,12 +595,11 @@ export default function ResidentProfileScreen({ route }) {
               value={form.email}
               onChangeText={(value) => updateField("email", value)}
               onBlur={() => setTouched((current) => ({ ...current, email: true }))}
-              onFocus={handleFieldFocus("email")}
-              inputRef={registerInputRef("email")}
               error={showError("email")}
               placeholder="Email"
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={false}
               returnKeyType="next"
             />
             <FormField
@@ -598,6 +655,7 @@ export default function ResidentProfileScreen({ route }) {
                   setTouched((current) => ({ ...current, gender: true }));
                 }}
                 options={GENDER_OPTIONS}
+                variant="profileGrid"
               />
               {showError("gender") ? <Text style={styles.customFieldError}>{showError("gender")}</Text> : null}
             </View>
@@ -629,6 +687,7 @@ export default function ResidentProfileScreen({ route }) {
                 setTouched((current) => ({ ...current, purok: true }));
               }}
               options={PUROK_OPTIONS}
+              variant="profileGrid"
             />
             <FormField
               label="Bio (Optional)"
@@ -885,6 +944,13 @@ export default function ResidentProfileScreen({ route }) {
           </View>
         </View>
       </View>
+
+      {!isReadOnly ? (
+        <Pressable style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={18} color={theme.danger} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </Pressable>
+      ) : null}
 
       <Modal visible={showDobPicker} transparent animationType="fade" onRequestClose={closeDobPicker}>
         <View style={styles.datePickerOverlay}>
@@ -1549,6 +1615,22 @@ function createStyles(theme) {
       color: theme.textMuted,
       fontSize: 13,
       fontWeight: "700",
+    },
+    logoutButton: {
+      minHeight: 54,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: "rgba(248, 113, 113, 0.22)",
+      backgroundColor: theme.dangerSoft,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    logoutText: {
+      color: theme.danger,
+      fontSize: 15,
+      fontWeight: "800",
     },
     errorText: {
       color: theme.error,

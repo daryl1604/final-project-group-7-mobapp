@@ -3,6 +3,7 @@ const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 const fullNamePattern = /^[A-Za-z][A-Za-z\s.'-]{1,}$/;
 const phonePattern = /^(09|\+639)\d{9}$/;
 const MAX_AGE = 120;
+const MIN_SIGNUP_AGE = 18;
 
 export const GENDER_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 
@@ -165,6 +166,20 @@ export function validateAddress(address) {
   return "";
 }
 
+function validateAddressHasMeaningfulText(address) {
+  const value = String(address || "").trim();
+
+  if (!value) {
+    return "";
+  }
+
+  if (!/[A-Za-z0-9]/.test(value)) {
+    return "Address cannot contain symbols only.";
+  }
+
+  return "";
+}
+
 export function validatePurok(purok) {
   if (!purok || purok.trim() === "") {
     return "Please select your purok.";
@@ -214,6 +229,26 @@ export function validateDateOfBirth(dateOfBirth) {
 
   if (birthDate.getTime() > today.getTime()) {
     return "Date of birth cannot be in the future.";
+  }
+
+  return "";
+}
+
+export function validateMinimumAge(dateOfBirth, minimumAge = MIN_SIGNUP_AGE) {
+  const value = String(dateOfBirth || "").trim();
+
+  if (!value) {
+    return "";
+  }
+
+  const derivedAge = calculateAgeFromDob(value);
+
+  if (!derivedAge) {
+    return "";
+  }
+
+  if (Number(derivedAge) < minimumAge) {
+    return `You must be at least ${minimumAge} years old to create an account.`;
   }
 
   return "";
@@ -279,14 +314,17 @@ export function getSignupErrors({
   gender,
   age,
 }) {
+  const addressError = validateAddress(address);
+  const dateOfBirthError = validateDateOfBirth(dateOfBirth);
+
   return {
     fullName: validateFullName(fullName),
     email: validateEmail(email),
     password: validatePassword(password),
     confirmPassword: validateConfirmPassword(password, confirmPassword),
     contactNumber: validatePhoneNumber(contactNumber),
-    address: validateAddress(address),
-    dateOfBirth: validateDateOfBirth(dateOfBirth),
+    address: addressError || validateAddressHasMeaningfulText(address),
+    dateOfBirth: dateOfBirthError || validateMinimumAge(dateOfBirth),
     gender: validateGender(gender),
     age: validateAge(age, dateOfBirth),
     purok: validatePurok(purok),

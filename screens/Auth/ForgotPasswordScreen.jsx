@@ -152,7 +152,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       setMessage("Password updated successfully. Please sign in.");
       setMessageType("success");
       setTimeout(() => {
-        navigation.replace("Login");
+        navigation.navigate("Login");
       }, 900);
     } catch (error) {
       setMessage(error.message);
@@ -268,13 +268,13 @@ export default function ForgotPasswordScreen({ navigation }) {
               loading={submitting}
             />
 
-            <Pressable onPress={() => navigation.replace("Login")} android_ripple={{ color: "transparent" }}>
+            <Pressable onPress={() => navigation.navigate("Login")} android_ripple={{ color: "transparent" }}>
               <Text style={forgotPasswordScreenStyles.link}>Back to Sign In</Text>
             </Pressable>
 
             <Pressable
               style={forgotPasswordScreenStyles.secondaryAction}
-              onPress={() => navigation.replace("Welcome")}
+              onPress={() => navigation.navigate("Welcome")}
               android_ripple={{ color: "transparent" }}
             >
               <Text style={forgotPasswordScreenStyles.secondaryLink}>Go to Welcome Screen</Text>

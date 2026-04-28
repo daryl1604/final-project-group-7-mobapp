@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import AppHeader from "../../components/common/AppHeader";
 import ScreenContainer from "../../components/common/ScreenContainer";
+import TypedConfirmationModal from "../../components/common/TypedConfirmationModal";
 import { THEME_OPTIONS } from "../../constants/appConstants";
 import { useApp } from "../../storage/AppProvider";
 
@@ -13,31 +15,14 @@ export default function SettingsScreen() {
     setNotificationsEnabled,
     deleteCurrentAccount,
     showAlert,
-    showConfirmation,
     theme,
   } = useApp();
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const styles = createStyles(theme);
   const isResident = currentUser?.role === "resident";
 
   const handleDeleteAccount = () => {
-    showConfirmation({
-      title: "Delete account?",
-      message: "This will permanently remove your resident account, reports, and in-app notifications from this device.",
-      confirmText: "Delete Account",
-      onConfirm: () =>
-        showConfirmation({
-          title: "Final confirmation",
-          message: "Are you absolutely sure you want to delete this resident account?",
-          confirmText: "Yes, Delete",
-          onConfirm: async () => {
-            try {
-              await deleteCurrentAccount();
-            } catch (error) {
-              showAlert("Unable to delete account", error.message, { variant: "danger" });
-            }
-          },
-        }),
-    });
+    setDeleteModalVisible(true);
   };
 
   return (
@@ -108,6 +93,23 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
       ) : null}
+
+      <TypedConfirmationModal
+        visible={deleteModalVisible}
+        title="Delete Account"
+        instruction={'Type "DELETE ACCOUNT" to confirm'}
+        confirmPhrase="DELETE ACCOUNT"
+        confirmLabel="Delete Account"
+        onClose={() => setDeleteModalVisible(false)}
+        onConfirm={async ({ message }) => {
+          try {
+            setDeleteModalVisible(false);
+            await deleteCurrentAccount({ message });
+          } catch (error) {
+            showAlert("Unable to delete account", error.message, { variant: "danger" });
+          }
+        }}
+      />
     </ScreenContainer>
   );
 }

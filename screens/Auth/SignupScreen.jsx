@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AuthBackground from "../../components/common/AuthBackground";
@@ -24,6 +25,19 @@ import { signupScreenStyles } from "../../styles/auth/SignupScreen.styles";
 const logoSource = require("../../assets/images/brgywatch-logo.png");
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const FIELD_ORDER = [
+  "fullName",
+  "email",
+  "contactNumber",
+  "address",
+  "dateOfBirth",
+  "gender",
+  "age",
+  "purok",
+  "password",
+  "confirmPassword",
+  "agreement",
+];
 const INITIAL_FORM = {
   fullName: "",
   email: "",
@@ -35,6 +49,58 @@ const INITIAL_FORM = {
   age: "",
   password: "",
   confirmPassword: "",
+};
+const POLICY_COPY = {
+  privacy: {
+    title: "Privacy Policy",
+    sections: [
+      {
+        heading: "Data Collected",
+        body:
+          "We collect your account details such as your name, contact information, report history, and submitted location details when you use the app.",
+      },
+      {
+        heading: "Purpose",
+        body:
+          "Your information is used to provide barangay services, manage your resident account, and track community reports and follow-up actions.",
+      },
+      {
+        heading: "Data Protection",
+        body:
+          "We take reasonable steps to protect your information and limit access to authorized barangay personnel who need it for service delivery.",
+      },
+      {
+        heading: "User Rights",
+        body:
+          "You may view, update, or request deletion of your account information, subject to barangay record-keeping requirements and applicable policies.",
+      },
+    ],
+  },
+  terms: {
+    title: "Terms of Service",
+    sections: [
+      {
+        heading: "User Responsibilities",
+        body:
+          "Residents must provide accurate account details and submit truthful, relevant, and respectful reports through the system.",
+      },
+      {
+        heading: "Prohibited Actions",
+        body:
+          "False reporting, spam submissions, harassment, abusive language, and misuse of the reporting tools are not allowed.",
+      },
+      {
+        heading: "Admin Rights",
+        body:
+          "Barangay administrators may review, verify, reject, or follow up on submitted reports to keep the platform safe and useful.",
+      },
+      {
+        heading: "Agreement",
+        body:
+          "By creating an account, you acknowledge these rules and agree to use the app responsibly and in good faith.",
+      },
+    ],
+  },
 };
 
 function formatDateValue(date) {
@@ -92,6 +158,10 @@ export default function SignupScreen({ navigation }) {
   const [createdAccountId, setCreatedAccountId] = useState(null);
   const [showDobPicker, setShowDobPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState("day");
+  const [agreementChecked, setAgreementChecked] = useState(false);
+  const [agreementTouched, setAgreementTouched] = useState(false);
+  const [activePolicy, setActivePolicy] = useState(null);
+  const fieldLayoutsRef = useRef({});
   const [pickerMonth, setPickerMonth] = useState(() => {
     const initialDate = new Date();
     initialDate.setFullYear(initialDate.getFullYear() - 18);
@@ -99,7 +169,7 @@ export default function SignupScreen({ navigation }) {
   });
   const ScreenWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
   const keyboardOffset = Math.max(insets.bottom, 18) + 76;
-  const { handleFieldFocus, registerInputRef } = useKeyboardAwareFieldFocus({
+  const { handleFieldFocus, registerInputRef, focusField } = useKeyboardAwareFieldFocus({
     scrollRef,
     extraScrollHeight: keyboardOffset,
   });
@@ -124,8 +194,12 @@ export default function SignupScreen({ navigation }) {
       finalErrors.contactNumber = "Phone number is already registered.";
     }
 
+    if ((submitted || agreementTouched) && !agreementChecked) {
+      finalErrors.agreement = "You must agree to the Privacy Policy and Terms of Service";
+    }
+
     return finalErrors;
-  }, [duplicateEmail, duplicatePhone, form, submitted, touched.contactNumber, touched.email]);
+  }, [agreementChecked, agreementTouched, duplicateEmail, duplicatePhone, form, submitted, touched.contactNumber, touched.email]);
 
   const canSubmit =
     !hasValidationErrors(errors) &&
@@ -139,7 +213,8 @@ export default function SignupScreen({ navigation }) {
         form.age &&
         form.password &&
         form.confirmPassword &&
-        form.purok
+        form.purok &&
+        agreementChecked
     );
 
   const calendarDays = useMemo(() => buildCalendarDays(pickerMonth), [pickerMonth]);
@@ -180,9 +255,67 @@ export default function SignupScreen({ navigation }) {
   };
 
   const visibleError = (field) => (successMessage ? "" : submitted || touched[field] ? errors[field] : "");
+  const visibleAgreementError = successMessage ? "" : submitted || agreementTouched ? errors.agreement : "";
+
+  const getSubmitErrors = () => {
+    const nextErrors = {
+      ...getSignupErrors(form),
+    };
+
+    if (!nextErrors.email && duplicateEmail) {
+      nextErrors.email = "Email is already registered.";
+    }
+
+    if (!nextErrors.contactNumber && duplicatePhone) {
+      nextErrors.contactNumber = "Phone number is already registered.";
+    }
+
+    if (!agreementChecked) {
+      nextErrors.agreement = "You must agree to the Privacy Policy and Terms of Service";
+    }
+
+    return nextErrors;
+  };
 
   const handleBlur = (field) => {
     setTouched((current) => (current[field] ? current : { ...current, [field]: true }));
+  };
+
+  const registerFieldLayout = (field) => (event) => {
+    fieldLayoutsRef.current[field] = event.nativeEvent.layout.y;
+  };
+
+  const scrollToMeasuredField = (field) => {
+    const y = fieldLayoutsRef.current[field];
+
+    if (typeof y !== "number") {
+      return false;
+    }
+
+    Keyboard.dismiss();
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo?.({
+        y: Math.max(y - 28, 0),
+        animated: true,
+      });
+    });
+    return true;
+  };
+
+  const focusFirstInvalidField = (nextErrors) => {
+    const firstInvalidField = FIELD_ORDER.find((field) => nextErrors[field]);
+
+    if (!firstInvalidField) {
+      return;
+    }
+
+    const focused = focusField(firstInvalidField);
+
+    if (focused) {
+      return;
+    }
+
+    scrollToMeasuredField(firstInvalidField);
   };
 
   const openDobPicker = () => {
@@ -205,6 +338,8 @@ export default function SignupScreen({ navigation }) {
   };
 
   const handleSignup = async () => {
+    const submitErrors = getSubmitErrors();
+
     setSubmitted(true);
     setTouched({
       fullName: true,
@@ -218,10 +353,12 @@ export default function SignupScreen({ navigation }) {
       age: true,
       purok: true,
     });
+    setAgreementTouched(true);
     setSubmitError("");
     setSuccessMessage("");
 
-    if (!canSubmit) {
+    if (hasValidationErrors(submitErrors) || !canSubmit) {
+      focusFirstInvalidField(submitErrors);
       return;
     }
 
@@ -248,9 +385,12 @@ export default function SignupScreen({ navigation }) {
       setShowConfirmPassword(false);
       setShowDobPicker(false);
       setPickerMode("day");
+      setAgreementChecked(false);
+      setAgreementTouched(false);
+      fieldLayoutsRef.current = {};
       setSuccessMessage("Account created successfully. Please sign in.");
       setTimeout(() => {
-        navigation.replace("Login");
+        navigation.navigate("Login");
       }, 1500);
     } catch (error) {
       setSubmitError(error.message);
@@ -334,7 +474,7 @@ export default function SignupScreen({ navigation }) {
               error={visibleError("address")}
             />
 
-            <View style={signupScreenStyles.selectorBlock}>
+            <View style={signupScreenStyles.selectorBlock} onLayout={registerFieldLayout("dateOfBirth")}>
               <Text style={signupScreenStyles.customFieldLabel}>Date of Birth</Text>
               <Pressable
                 style={[
@@ -357,7 +497,7 @@ export default function SignupScreen({ navigation }) {
               ) : null}
             </View>
 
-            <View style={signupScreenStyles.selectorBlock}>
+            <View style={signupScreenStyles.selectorBlock} onLayout={registerFieldLayout("gender")}>
               <OptionSelector
                 label="Gender"
                 value={form.gender}
@@ -371,7 +511,7 @@ export default function SignupScreen({ navigation }) {
               {visibleError("gender") ? <Text style={signupScreenStyles.fieldError}>{visibleError("gender")}</Text> : null}
             </View>
 
-            <View style={signupScreenStyles.selectorBlock}>
+            <View style={signupScreenStyles.selectorBlock} onLayout={registerFieldLayout("age")}>
               <Text style={signupScreenStyles.customFieldLabel}>Age</Text>
               <View
                 style={[
@@ -392,7 +532,7 @@ export default function SignupScreen({ navigation }) {
               {visibleError("age") ? <Text style={signupScreenStyles.fieldError}>{visibleError("age")}</Text> : null}
             </View>
 
-            <View style={signupScreenStyles.selectorBlock}>
+            <View style={signupScreenStyles.selectorBlock} onLayout={registerFieldLayout("purok")}>
               <OptionSelector
                 label="Purok"
                 value={form.purok}
@@ -440,6 +580,41 @@ export default function SignupScreen({ navigation }) {
               error={visibleError("confirmPassword")}
             />
 
+            <View style={signupScreenStyles.agreementSection} onLayout={registerFieldLayout("agreement")}>
+              <View
+                style={signupScreenStyles.agreementRow}
+              >
+                <Pressable
+                  style={signupScreenStyles.checkboxTapTarget}
+                  onPress={() => {
+                    setAgreementChecked((current) => !current);
+                    setAgreementTouched(true);
+                  }}
+                >
+                  <View
+                    style={[
+                      signupScreenStyles.checkbox,
+                      agreementChecked ? signupScreenStyles.checkboxChecked : null,
+                      visibleAgreementError ? signupScreenStyles.checkboxError : null,
+                    ]}
+                  >
+                    {agreementChecked ? <Ionicons name="checkmark" size={15} color="#ffffff" /> : null}
+                  </View>
+                </Pressable>
+                <Text style={signupScreenStyles.agreementText}>
+                  I agree to the{" "}
+                  <Text style={signupScreenStyles.linkText} onPress={() => setActivePolicy("privacy")}>
+                    Privacy Policy
+                  </Text>{" "}
+                  and{" "}
+                  <Text style={signupScreenStyles.linkText} onPress={() => setActivePolicy("terms")}>
+                    Terms of Service
+                  </Text>
+                </Text>
+              </View>
+              {visibleAgreementError ? <Text style={signupScreenStyles.fieldError}>{visibleAgreementError}</Text> : null}
+            </View>
+
             {submitError ? <Text style={signupScreenStyles.submitError}>{submitError}</Text> : null}
 
             {successMessage ? (
@@ -458,14 +633,14 @@ export default function SignupScreen({ navigation }) {
 
             <View style={signupScreenStyles.footerRow}>
               <Text style={signupScreenStyles.footerText}>Already have an account?</Text>
-              <Pressable onPress={() => navigation.replace("Login")} android_ripple={{ color: "transparent" }}>
+              <Pressable onPress={() => navigation.navigate("Login")} android_ripple={{ color: "transparent" }}>
                 <Text style={signupScreenStyles.footerLink}>Sign In</Text>
               </Pressable>
             </View>
 
             <Pressable
               style={signupScreenStyles.secondaryAction}
-              onPress={() => navigation.replace("Welcome")}
+              onPress={() => navigation.navigate("Welcome")}
               android_ripple={{ color: "transparent" }}
             >
               <Text style={signupScreenStyles.secondaryLink}>Go to Welcome Screen</Text>
@@ -658,6 +833,30 @@ export default function SignupScreen({ navigation }) {
                 })}
               </ScrollView>
             ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(activePolicy)} transparent animationType="fade" onRequestClose={() => setActivePolicy(null)}>
+        <View style={signupScreenStyles.policyOverlay}>
+          <Pressable style={signupScreenStyles.policyBackdrop} onPress={() => setActivePolicy(null)} />
+          <View style={signupScreenStyles.policyCard}>
+            <View style={signupScreenStyles.policyHeader}>
+              <Text style={signupScreenStyles.policyTitle}>{activePolicy ? POLICY_COPY[activePolicy].title : ""}</Text>
+              <Pressable style={signupScreenStyles.policyClose} onPress={() => setActivePolicy(null)}>
+                <Text style={signupScreenStyles.policyCloseText}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView style={signupScreenStyles.policyScroll} contentContainerStyle={signupScreenStyles.policyScrollContent}>
+              {activePolicy
+                ? POLICY_COPY[activePolicy].sections.map((section) => (
+                    <View key={section.heading} style={signupScreenStyles.policySection}>
+                      <Text style={signupScreenStyles.policySectionTitle}>{section.heading}</Text>
+                      <Text style={signupScreenStyles.policyBody}>{section.body}</Text>
+                    </View>
+                  ))
+                : null}
+            </ScrollView>
           </View>
         </View>
       </Modal>

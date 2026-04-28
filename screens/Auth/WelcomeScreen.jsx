@@ -31,7 +31,7 @@ export default function WelcomeScreen({ navigation }) {
         <View style={welcomeScreenStyles.buttonStack}>
           <Pressable
             style={[welcomeScreenStyles.pressable, welcomeScreenStyles.primaryButton]}
-            onPress={() => navigation.replace("Login")}
+            onPress={() => navigation.navigate("Login")}
             android_ripple={{ color: "transparent" }}
           >
             <LinearGradient
@@ -47,7 +47,7 @@ export default function WelcomeScreen({ navigation }) {
 
           <Pressable
             style={[welcomeScreenStyles.pressable, welcomeScreenStyles.secondaryButton]}
-            onPress={() => navigation.replace("Signup")}
+            onPress={() => navigation.navigate("Signup")}
             android_ripple={{ color: "transparent" }}
           >
             <Text style={welcomeScreenStyles.secondaryButtonText}>Create Account</Text>

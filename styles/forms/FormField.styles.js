@@ -31,6 +31,11 @@ export function createFormFieldStyles(theme) {
     inputError: {
       borderColor: theme.danger,
     },
+    inputDisabled: {
+      backgroundColor: theme.surfaceSoft,
+      color: theme.textSoft,
+      opacity: 0.9,
+    },
     inputMultiline: {
       minHeight: 110,
     },

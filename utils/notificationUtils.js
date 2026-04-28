@@ -1,30 +1,38 @@
-import { Platform } from "react-native";
-import { isRunningInExpoGo } from "expo";
+import { LogBox, Platform } from "react-native";
+import Constants from "expo-constants";
 
 let notificationHandlerConfigured = false;
+let notificationWarningSuppressed = false;
 
 async function getNotificationsModule() {
-  if (isRunningInExpoGo()) {
+  try {
+    if (!notificationWarningSuppressed) {
+      LogBox.ignoreLogs([
+        "expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go",
+      ]);
+      notificationWarningSuppressed = true;
+    }
+
+    const Notifications = await import("expo-notifications");
+
+    if (!notificationHandlerConfigured) {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+
+      notificationHandlerConfigured = true;
+    }
+
+    return Notifications;
+  } catch {
     return null;
   }
-
-  const Notifications = await import("expo-notifications");
-
-  if (!notificationHandlerConfigured) {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
-
-    notificationHandlerConfigured = true;
-  }
-
-  return Notifications;
 }
 
 export async function requestNotificationAccess() {
@@ -33,7 +41,7 @@ export async function requestNotificationAccess() {
   if (!Notifications) {
     return {
       granted: false,
-      status: "unavailable_in_expo_go",
+      status: "denied",
       isDevice: false,
     };
   }
@@ -75,6 +83,7 @@ export async function sendLocalNotification({ title, body, data }) {
       body,
       data,
       sound: true,
+      ...(Platform.OS === "android" ? { channelId: "default" } : {}),
     },
     trigger: null,
   });

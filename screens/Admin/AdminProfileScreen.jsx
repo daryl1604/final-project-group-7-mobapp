@@ -33,6 +33,16 @@ function getInitials(fullName = "") {
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "BA";
 }
 
+function normalizeProfileForm(form) {
+  return {
+    fullName: String(form?.fullName || "").trim(),
+    email: String(form?.email || "").trim().toLowerCase(),
+    contactNumber: String(form?.contactNumber || "").trim(),
+    photoUri: String(form?.photoUri || "").trim(),
+    bio: String(form?.bio || "").trim(),
+  };
+}
+
 function isSupportedImageAsset(asset) {
   if (!asset?.uri) {
     return false;
@@ -70,7 +80,7 @@ function formatRegisteredDate(value) {
 }
 
 export default function AdminProfileScreen() {
-  const { currentUser, updateProfile, changePassword, showAlert, theme, reports, unreadNotificationsCount, openDrawer } = useApp();
+  const { currentUser, updateProfile, changePassword, showAlert, showConfirmation, logout, theme, reports, unreadNotificationsCount, openDrawer } = useApp();
   const scrollRef = useRef(null);
   const { handleFieldFocus, registerInputRef } = useKeyboardAwareFieldFocus({ scrollRef });
   const [form, setForm] = useState(createInitialForm(currentUser));
@@ -295,15 +305,29 @@ export default function AdminProfileScreen() {
     }
   };
 
+  const handleLogout = () => {
+    showConfirmation({
+      title: "Log out?",
+      message: "Are you sure you want to log out?",
+      confirmText: "Logout",
+      onConfirm: async () => {
+        await logout();
+      },
+    });
+  };
+
   const initials = getInitials(form.fullName || currentUser?.fullName);
   const registeredDate = formatRegisteredDate(currentUser?.createdAt);
   const lastPasswordChanged = formatRegisteredDate(currentUser?.passwordUpdatedAt || currentUser?.createdAt);
   const isProfileValid = !Object.values(errors).some(Boolean);
+  const hasProfileChanges = useMemo(() => {
+    return JSON.stringify(normalizeProfileForm(form)) !== JSON.stringify(normalizeProfileForm(createInitialForm(currentUser)));
+  }, [currentUser, form]);
   const hasPasswordChanges = Boolean(
     passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmNewPassword
   );
   const isPasswordValid = !Object.values(passwordErrors).some(Boolean);
-  const canSaveProfile = isProfileValid && !saving;
+  const canSaveProfile = hasProfileChanges && isProfileValid && !saving;
   const canSavePassword = hasPasswordChanges && isPasswordValid && !saving;
 
   return (
@@ -376,12 +400,11 @@ export default function AdminProfileScreen() {
               value={form.email}
               onChangeText={(value) => updateField("email", value)}
               onBlur={() => setTouched((current) => ({ ...current, email: true }))}
-              onFocus={handleFieldFocus("email")}
-              inputRef={registerInputRef("email")}
               error={showError("email")}
               placeholder="admin@email.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={false}
               returnKeyType="next"
             />
             <FormField
@@ -629,6 +652,11 @@ export default function AdminProfileScreen() {
           </View>
         </View>
       </View>
+
+      <Pressable style={styles.logoutButton} onPress={handleLogout}>
+        <Ionicons name="log-out-outline" size={18} color={theme.danger} />
+        <Text style={styles.logoutText}>Logout</Text>
+      </Pressable>
     </ScreenContainer>
   );
 }
@@ -903,6 +931,22 @@ function createStyles(theme) {
       color: theme.textMuted,
       fontSize: 13,
       fontWeight: "700",
+    },
+    logoutButton: {
+      minHeight: 54,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: "rgba(248, 113, 113, 0.22)",
+      backgroundColor: theme.dangerSoft,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    logoutText: {
+      color: theme.danger,
+      fontSize: 15,
+      fontWeight: "800",
     },
     errorText: {
       color: theme.error,

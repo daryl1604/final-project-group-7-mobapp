@@ -234,6 +234,67 @@ function buildIncidentCounts(reports) {
     .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
 }
 
+function getInsightsHighlightItems({ periodComparisons, dominantPurok, trendText }) {
+  const items = [];
+
+  if (dominantPurok?.value > 0) {
+    items.push({
+      icon: "location-outline",
+      text: `${dominantPurok.label} has the most activity`,
+    });
+  }
+
+  items.push({
+    icon: "trending-up-outline",
+    text: trendText,
+  });
+
+  items.push({
+    icon: "document-text-outline",
+    text: `${periodComparisons.week.current} new report${periodComparisons.week.current === 1 ? "" : "s"} submitted this week`,
+  });
+
+  return items;
+}
+
+function getInsightsSuggestions({ pendingCount, resolvedCount, dominantPurok }) {
+  const items = [];
+
+  if (pendingCount > 0) {
+    items.push({
+      icon: "time-outline",
+      text: "Review pending reports",
+      action: "pending",
+    });
+  }
+
+  if (resolvedCount === 0) {
+    items.push({
+      icon: "checkmark-done-outline",
+      text: "Follow up on unresolved cases",
+      action: "reports",
+    });
+  }
+
+  if (dominantPurok?.value > 0) {
+    items.push({
+      icon: "location-outline",
+      text: `Monitor activity in ${dominantPurok.label}`,
+      action: "purok",
+    });
+  }
+
+  return items.length
+    ? items
+    : [
+        {
+          icon: "checkmark-circle-outline",
+          text: "No immediate follow-up needed",
+          action: null,
+        },
+      ];
+}
+
 function getIncidentIcon(label) {
   const value = String(label || "").toLowerCase();
 
@@ -275,34 +336,25 @@ function StatCard({ item, styles }) {
   );
 }
 
-function SummaryVisual({ values, styles, compact }) {
-  const maxValue = Math.max(...values, 1);
-  const total = values.reduce((sum, value) => sum + value, 0);
-  const colors = ["#4f83ff", "#9c5cff", "#34d399"];
-
+function InsightGroupCard({ title, icon, tint, children, styles }) {
   return (
-    <View style={[styles.summaryVisual, compact ? styles.summaryVisualCompact : null]}>
-      <View style={styles.summaryBars}>
-        {values.map((value, index) => (
-          <View key={`${index}-${value}`} style={styles.summaryBarColumn}>
-            <View style={styles.summaryBarTrack}>
-              <View
-                style={[
-                  styles.summaryBarFill,
-                  {
-                    height: `${Math.max((value / maxValue) * 100, value > 0 ? 18 : 8)}%`,
-                    backgroundColor: colors[index],
-                  },
-                ]}
-              />
-            </View>
-          </View>
-        ))}
+    <View style={[styles.insightCard, { backgroundColor: tint.background }]}>
+      <View style={styles.insightHeader}>
+        <View style={[styles.insightIconWrap, { backgroundColor: tint.iconBackground }]}>
+          <Ionicons name={icon} size={18} color={tint.iconColor} />
+        </View>
+        <Text style={styles.insightTitle}>{title}</Text>
       </View>
-      <View style={styles.summaryTotalBadge}>
-        <Text style={styles.summaryTotalValue}>{total}</Text>
-        <Text style={styles.summaryTotalLabel}>Total</Text>
-      </View>
+      {children}
+    </View>
+  );
+}
+
+function InsightBullet({ icon, text, styles, color }) {
+  return (
+    <View style={styles.insightBullet}>
+      <Ionicons name={icon} size={16} color={color} />
+      <Text style={styles.insightBulletText}>{text}</Text>
     </View>
   );
 }
@@ -605,7 +657,23 @@ export default function AdminAnalyticsScreen({ navigation }) {
   const dominantStatus = statusCounts.reduce((best, item) => (item.value > best.value ? item : best), statusCounts[0]);
   const dominantPurok = purokCounts.reduce((best, item) => (item.value > best.value ? item : best), purokCounts[0]);
   const topIncidents = incidentCounts.slice(0, 5);
-  const summaryValues = summaryCards.map((item) => item.current);
+  const pendingCount = statusCounts.find((item) => item.label === "Pending")?.value || 0;
+  const resolvedCount = statusCounts.find((item) => item.label === "Resolved")?.value || 0;
+  const trend = formatTrend(periodComparisons[timeFilter].current, periodComparisons[timeFilter].previous);
+  const trendText =
+    periodComparisons[timeFilter].current === periodComparisons[timeFilter].previous
+      ? "Reports stayed steady compared to the last period"
+      : periodComparisons[timeFilter].current > periodComparisons[timeFilter].previous
+        ? "Reports increased compared to the last period"
+        : "Reports decreased compared to the last period";
+  const highlightItems = useMemo(
+    () => getInsightsHighlightItems({ periodComparisons, dominantPurok, trendText }),
+    [dominantPurok, periodComparisons, trendText]
+  );
+  const suggestionItems = useMemo(
+    () => getInsightsSuggestions({ pendingCount, resolvedCount, dominantPurok }),
+    [dominantPurok, pendingCount, resolvedCount]
+  );
 
   const activeStatus = selectedStatus || (dominantStatus?.value > 0 ? dominantStatus.label : REPORT_STATUSES[0]);
   const activePurok = selectedPurok || (dominantPurok?.value > 0 ? dominantPurok.label : PUROK_OPTIONS[0]);
@@ -634,32 +702,6 @@ export default function AdminAnalyticsScreen({ navigation }) {
               <StatCard item={item} styles={styles} />
             </View>
           ))}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Generated summary</Text>
-          <Text style={styles.summaryText}>
-            The app is currently tracking {totalReports} report{totalReports === 1 ? "" : "s"}. This week recorded {periodComparisons.week.current}, while
-            the current month has {periodComparisons.month.current}. The yearly total is {periodComparisons.year.current}, helping admins compare short-term
-            activity against the bigger picture.
-          </Text>
-
-          <View style={styles.summaryHighlightRow}>
-            <View style={styles.summaryHighlight}>
-              <Text style={styles.summaryHighlightLabel}>Highest status volume</Text>
-              <Text style={styles.summaryHighlightValue}>
-                {dominantStatus.label}: {dominantStatus.value}
-              </Text>
-            </View>
-            <View style={styles.summaryHighlight}>
-              <Text style={styles.summaryHighlightLabel}>Most active purok</Text>
-              <Text style={styles.summaryHighlightValue}>
-                {dominantPurok.label}: {dominantPurok.value}
-              </Text>
-            </View>
-          </View>
-
-          <SummaryVisual values={summaryValues} styles={styles} compact={compact} />
         </View>
 
         <View style={styles.card}>
@@ -797,6 +839,107 @@ export default function AdminAnalyticsScreen({ navigation }) {
             </View>
           )}
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Insights & Alerts</Text>
+          <View style={styles.insightsStack}>
+            <InsightGroupCard
+              title="Priority Alert"
+              icon="alert-circle-outline"
+              tint={{
+                background: theme.mode === "dark" ? "#2a2110" : "#fff8e8",
+                iconBackground: "rgba(245, 194, 75, 0.16)",
+                iconColor: "#f5c24b",
+              }}
+              styles={styles}
+            >
+              <Text style={styles.insightLead}>
+                {pendingCount > 0 || resolvedCount === 0 ? "Attention Needed" : "All reports are up to date"}
+              </Text>
+              <View style={styles.insightList}>
+                {pendingCount > 0 ? <InsightBullet icon="time-outline" text={`${pendingCount} report${pendingCount === 1 ? "" : "s"} still Pending`} styles={styles} color="#f5c24b" /> : null}
+                {resolvedCount === 0 ? <InsightBullet icon="close-circle-outline" text="No reports resolved yet" styles={styles} color="#f87171" /> : null}
+                {pendingCount === 0 && resolvedCount > 0 ? (
+                  <InsightBullet icon="checkmark-circle-outline" text="No urgent issues need review right now" styles={styles} color={theme.success} />
+                ) : null}
+              </View>
+            </InsightGroupCard>
+
+            <InsightGroupCard
+              title="Key Highlights"
+              icon="sparkles-outline"
+              tint={{
+                background: theme.mode === "dark" ? "#102447" : "#f4f8ff",
+                iconBackground: "rgba(79, 131, 255, 0.16)",
+                iconColor: theme.primary,
+              }}
+              styles={styles}
+            >
+              <View style={styles.insightList}>
+                {highlightItems.map((item) => (
+                  <InsightBullet key={item.text} icon={item.icon} text={item.text} styles={styles} color={theme.primary} />
+                ))}
+              </View>
+            </InsightGroupCard>
+
+            <InsightGroupCard
+              title="Suggested Actions"
+              icon="flash-outline"
+              tint={{
+                background: theme.mode === "dark" ? "#10251d" : "#eefcf6",
+                iconBackground: "rgba(52, 211, 153, 0.16)",
+                iconColor: theme.success,
+              }}
+              styles={styles}
+            >
+              <View style={styles.insightList}>
+                {suggestionItems.map((item) => (
+                  <Pressable
+                    key={item.text}
+                    style={styles.insightActionRow}
+                    onPress={() => {
+                      if (item.action === "pending") {
+                        setSelectedStatus("Pending");
+                        setStatusModalOpen(true);
+                        return;
+                      }
+
+                      if (item.action === "purok" && dominantPurok?.label) {
+                        setSelectedPurok(dominantPurok.label);
+                        setPurokModalOpen(true);
+                        return;
+                      }
+
+                      if (item.action === "reports") {
+                        openAllReports();
+                      }
+                    }}
+                    disabled={!item.action}
+                  >
+                    <InsightBullet icon={item.icon} text={item.text} styles={styles} color={theme.success} />
+                    {item.action ? (
+                      <View style={styles.insightActionIcon}>
+                        <Ionicons name="chevron-forward" size={16} color={theme.success} />
+                      </View>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </View>
+            </InsightGroupCard>
+
+            <View style={[styles.insightFooterCard, { backgroundColor: theme.mode === "dark" ? "#1e1733" : "#f7f1ff" }]}>
+              <View style={[styles.insightIconWrap, { backgroundColor: "rgba(156, 92, 255, 0.16)" }]}>
+                <Ionicons name={trend.icon} size={18} color={trend.color} />
+              </View>
+              <View style={styles.insightFooterCopy}>
+                <Text style={styles.insightFooterTitle}>Trend Signal</Text>
+                <Text style={styles.insightFooterText}>
+                  {trendText} {trend.text !== "0%" ? `(${trend.text})` : ""}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
       </View>
 
       <ReportDetailsModal
@@ -926,89 +1069,97 @@ function createStyles(theme) {
       flex: 1,
       minWidth: 0,
     },
-    summaryText: {
-      color: theme.textMuted,
-      fontSize: 14,
-      lineHeight: 22,
+    insightsStack: {
+      gap: 12,
     },
-    summaryHighlightRow: {
-      flexDirection: "row",
-      gap: 10,
-    },
-    summaryHighlight: {
-      flex: 1,
-      borderRadius: 16,
-      backgroundColor: theme.inputBackground,
+    insightCard: {
+      borderRadius: 20,
       borderWidth: 1,
       borderColor: theme.border,
-      padding: 12,
-      gap: 4,
+      padding: 14,
+      gap: 12,
     },
-    summaryHighlightLabel: {
-      color: theme.textSoft,
-      fontSize: 10,
-      fontWeight: "800",
-      textTransform: "uppercase",
-      letterSpacing: 0.6,
-      lineHeight: 13,
-    },
-    summaryHighlightValue: {
-      color: theme.text,
-      fontSize: 14,
-      fontWeight: "800",
-      lineHeight: 18,
-    },
-    summaryVisual: {
+    insightHeader: {
       flexDirection: "row",
-      alignItems: "flex-end",
-      gap: 14,
-      minHeight: 136,
-    },
-    summaryVisualCompact: {
       alignItems: "center",
+      gap: 8,
+      minWidth: 0,
     },
-    summaryBars: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "flex-end",
-      gap: 10,
-      minHeight: 120,
-    },
-    summaryBarColumn: {
-      flex: 1,
-    },
-    summaryBarTrack: {
-      height: 112,
-      borderRadius: 18,
-      backgroundColor: theme.surfaceSoft,
-      overflow: "hidden",
-      justifyContent: "flex-end",
-    },
-    summaryBarFill: {
-      width: "100%",
-      minHeight: 8,
-      borderRadius: 18,
-    },
-    summaryTotalBadge: {
-      width: 82,
-      height: 82,
-      borderRadius: 41,
-      borderWidth: 2,
-      borderColor: "#9c5cff",
+    insightIconWrap: {
+      width: 34,
+      height: 34,
+      borderRadius: 12,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: theme.surface,
+      flexShrink: 0,
     },
-    summaryTotalValue: {
+    insightTitle: {
       color: theme.text,
-      fontSize: 22,
+      fontSize: 15,
       fontWeight: "900",
-      lineHeight: 24,
+      flex: 1,
     },
-    summaryTotalLabel: {
-      color: theme.textSoft,
-      fontSize: 11,
+    insightLead: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: "800",
+      lineHeight: 21,
+    },
+    insightList: {
+      gap: 10,
+    },
+    insightBullet: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      minWidth: 0,
+    },
+    insightBulletText: {
+      flex: 1,
+      flexShrink: 1,
+      color: theme.textMuted,
+      fontSize: 14,
       fontWeight: "700",
+      lineHeight: 20,
+    },
+    insightActionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      minWidth: 0,
+      overflow: "hidden",
+      paddingRight: 2,
+    },
+    insightActionIcon: {
+      width: 20,
+      alignItems: "flex-end",
+      flexShrink: 0,
+    },
+    insightFooterCard: {
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    insightFooterCopy: {
+      flex: 1,
+      gap: 4,
+    },
+    insightFooterTitle: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    insightFooterText: {
+      color: theme.textMuted,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 18,
     },
     filterButton: {
       minHeight: 38,

@@ -20,18 +20,20 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "navigationBar": {
-        "backgroundColor": "#0d1728",
-        "barStyle": "light-content"
-      },
       "edgeToEdgeEnabled": true,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "CAMERA"
+        "CAMERA",
+        "POST_NOTIFICATIONS"
       ]
     },
+    "androidNavigationBar": {
+      "backgroundColor": "#0d1728",
+      "barStyle": "light-content"
+    },
     "plugins": [
+      "expo-notifications",
       [
         "expo-image-picker",
         {

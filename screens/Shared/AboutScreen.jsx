@@ -7,63 +7,122 @@ import { useApp } from "../../storage/AppProvider";
 const logoSource = require("../../assets/images/brgywatch-logo.png");
 
 const FEATURE_ITEMS = [
-  "Incident Reporting",
-  "Real-time Monitoring",
-  "Community Management",
-  "Barangay Administration Tools",
+  {
+    icon: "document-text-outline",
+    title: "Incident Reporting",
+    text: "Residents can submit community issues with descriptions, photos, purok details, and captured location information.",
+  },
+  {
+    icon: "notifications-outline",
+    title: "Status And Feedback Updates",
+    text: "Both residents and admins can follow activity through notifications, report timelines, and detailed report views.",
+  },
+  {
+    icon: "people-outline",
+    title: "Resident Account Management",
+    text: "Admins can organize resident access, keep records updated, and manage account visibility inside the system.",
+  },
+  {
+    icon: "bar-chart-outline",
+    title: "Analytics And Monitoring",
+    text: "Admins can review report patterns and activity trends to support faster barangay-level decision making.",
+  },
+];
+
+const ROLE_USE_CASES = [
+  {
+    icon: "person-outline",
+    title: "For Residents",
+    text: "BrgyWatch gives residents a clearer way to report local issues, monitor progress, and stay informed about barangay action.",
+  },
+  {
+    icon: "shield-checkmark-outline",
+    title: "For Administrators",
+    text: "BrgyWatch helps barangay staff review incidents, coordinate responses, manage residents, and maintain reporting transparency.",
+  },
 ];
 
 export default function AboutScreen() {
-  const { theme } = useApp();
+  const { theme, currentUser } = useApp();
   const styles = createStyles(theme);
+  const isAdmin = currentUser?.role === "admin";
 
   return (
-    <ScreenContainer>
+    <ScreenContainer contentStyle={styles.screenContent}>
       <AppHeader title="About" variant="toolbar" />
 
       <View style={styles.heroCard}>
-        <Text style={styles.heroTitle}>About BrgyWatch</Text>
-        <Text style={styles.heroSubtitle}>Barangay Incident Reporting System</Text>
-      </View>
-
-      <View style={styles.card}>
-        <View style={styles.brandRow}>
+        <View style={styles.heroGlowPrimary} />
+        <View style={styles.heroGlowSecondary} />
+        <View style={styles.heroTopRow}>
           <View style={styles.logoWrap}>
             <Image source={logoSource} style={styles.logo} resizeMode="contain" />
           </View>
-          <View style={styles.brandText}>
-            <Text style={styles.appName}>BrgyWatch</Text>
-            <Text style={styles.appMeta}>Version: 1.0.0</Text>
+          <View style={styles.heroCopy}>
+            <Text style={styles.heroTitle}>BrgyWatch</Text>
+            <Text style={styles.heroSubtitle}>Barangay Incident Reporting System</Text>
+            <View style={styles.metaBadge}>
+              <Ionicons name="layers-outline" size={14} color={theme.primary} />
+              <Text style={styles.metaBadgeText}>Version 1.0.0</Text>
+            </View>
           </View>
         </View>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Description</Text>
-        <Text style={styles.bodyText}>
-          BrgyWatch is a Barangay Incident Reporting System designed to help communities report, monitor, and manage local incidents efficiently. It provides barangay officials and residents with a streamlined way to improve communication, transparency, and public safety.
+        <Text style={styles.heroText}>
+          BrgyWatch is a mobile application built to improve communication between residents and barangay officials through
+          organized incident reporting, clearer updates, and better visibility into local community concerns.
         </Text>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Features</Text>
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionAccentBar} />
+        <Text style={styles.sectionTitle}>What The App Does</Text>
+        <Text style={styles.bodyText}>
+          The system supports the full reporting flow, from submission and review to follow-up, notifications, and status
+          monitoring. It is designed to reduce confusion, help reports reach the right people faster, and give both
+          residents and admins a more structured way to handle barangay issues.
+        </Text>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionAccentBar} />
+        <Text style={styles.sectionTitle}>Core Features</Text>
         <View style={styles.featureList}>
           {FEATURE_ITEMS.map((item) => (
-            <View key={item} style={styles.featureRow}>
+            <View key={item.title} style={styles.featureRow}>
               <View style={styles.featureIconWrap}>
-                <Ionicons name="checkmark-circle-outline" size={18} color={theme.primary} />
+                <Ionicons name={item.icon} size={18} color={theme.primary} />
               </View>
-              <Text style={styles.featureText}>{item}</Text>
+              <View style={styles.featureCopy}>
+                <Text style={styles.featureTitle}>{item.title}</Text>
+                <Text style={styles.featureText}>{item.text}</Text>
+              </View>
             </View>
           ))}
         </View>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>System Info</Text>
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionAccentBar} />
+        <Text style={styles.sectionTitle}>Who It Helps</Text>
+        <View style={styles.roleList}>
+          {ROLE_USE_CASES.map((item) => (
+            <View key={item.title} style={styles.roleCard}>
+              <View style={styles.roleIconWrap}>
+                <Ionicons name={item.icon} size={18} color={theme.primary} />
+              </View>
+              <Text style={styles.roleTitle}>{item.title}</Text>
+              <Text style={styles.roleText}>{item.text}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionAccentBar} />
+        <Text style={styles.sectionTitle}>System Information</Text>
         <View style={styles.infoList}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>App Name</Text>
+            <Text style={styles.infoLabel}>Application</Text>
             <Text style={styles.infoValue}>BrgyWatch</Text>
           </View>
           <View style={styles.infoRow}>
@@ -71,14 +130,23 @@ export default function AboutScreen() {
             <Text style={styles.infoValue}>1.0.0</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>System Type</Text>
+            <Text style={styles.infoLabel}>Platform</Text>
             <Text style={styles.infoValue}>Mobile Application</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Primary User View</Text>
+            <Text style={styles.infoValue}>{isAdmin ? "Administrator" : "Resident"}</Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>© 2025 BrgyWatch. All rights reserved.</Text>
+      <View style={styles.footerCard}>
+        <View style={styles.footerAccentRing} />
+        <Text style={styles.footerTitle}>Purpose</Text>
+        <Text style={styles.footerText}>
+          BrgyWatch aims to support safer, more responsive, and more transparent barangay operations through digital
+          reporting and easier community coordination.
+        </Text>
       </View>
     </ScreenContainer>
   );
@@ -86,51 +154,53 @@ export default function AboutScreen() {
 
 function createStyles(theme) {
   return StyleSheet.create({
+    screenContent: {
+      gap: 16,
+      paddingBottom: 36,
+    },
     heroCard: {
       backgroundColor: theme.surface,
-      borderRadius: 24,
+      borderRadius: 28,
       borderWidth: 1,
       borderColor: theme.border,
       padding: 20,
-      gap: 6,
+      gap: 16,
+      overflow: "hidden",
+      position: "relative",
       shadowColor: theme.shadowStrong,
       shadowOffset: { width: 0, height: 12 },
       shadowOpacity: 0.08,
       shadowRadius: 18,
       elevation: 4,
     },
-    heroTitle: {
-      color: theme.text,
-      fontSize: 24,
-      fontWeight: "800",
+    heroGlowPrimary: {
+      position: "absolute",
+      width: 150,
+      height: 150,
+      borderRadius: 999,
+      top: -52,
+      right: -38,
+      backgroundColor: theme.primarySoft,
+      opacity: theme.mode === "dark" ? 0.5 : 0.85,
     },
-    heroSubtitle: {
-      color: theme.textMuted,
-      fontSize: 14,
-      lineHeight: 20,
+    heroGlowSecondary: {
+      position: "absolute",
+      width: 96,
+      height: 96,
+      borderRadius: 999,
+      bottom: -24,
+      left: -18,
+      backgroundColor: theme.mode === "dark" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.65)",
     },
-    card: {
-      backgroundColor: theme.surface,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: theme.border,
-      padding: 18,
-      gap: 14,
-      shadowColor: theme.shadowStrong,
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: 0.08,
-      shadowRadius: 18,
-      elevation: 4,
-    },
-    brandRow: {
+    heroTopRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 16,
     },
     logoWrap: {
-      width: 72,
-      height: 72,
-      borderRadius: 20,
+      width: 78,
+      height: 78,
+      borderRadius: 22,
       backgroundColor: theme.surfaceSoft,
       borderWidth: 1,
       borderColor: theme.border,
@@ -142,19 +212,64 @@ function createStyles(theme) {
       width: "100%",
       height: "100%",
     },
-    brandText: {
+    heroCopy: {
       flex: 1,
-      gap: 4,
+      gap: 6,
     },
-    appName: {
+    heroTitle: {
       color: theme.text,
-      fontSize: 22,
-      fontWeight: "800",
+      fontSize: 26,
+      fontWeight: "900",
     },
-    appMeta: {
+    heroSubtitle: {
       color: theme.textMuted,
       fontSize: 14,
-      fontWeight: "600",
+      lineHeight: 20,
+    },
+    metaBadge: {
+      alignSelf: "flex-start",
+      minHeight: 30,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      backgroundColor: theme.primarySoft,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    metaBadgeText: {
+      color: theme.primary,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    heroText: {
+      color: theme.textMuted,
+      fontSize: 14,
+      lineHeight: 22,
+    },
+    sectionCard: {
+      backgroundColor: theme.surface,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 18,
+      gap: 14,
+      overflow: "hidden",
+      position: "relative",
+      shadowColor: theme.shadowStrong,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.08,
+      shadowRadius: 18,
+      elevation: 4,
+    },
+    sectionAccentBar: {
+      position: "absolute",
+      top: 0,
+      left: 18,
+      right: 18,
+      height: 4,
+      borderRadius: 999,
+      backgroundColor: theme.primary,
+      opacity: 0.9,
     },
     sectionTitle: {
       color: theme.text,
@@ -167,28 +282,70 @@ function createStyles(theme) {
       lineHeight: 22,
     },
     featureList: {
-      gap: 12,
+      gap: 14,
     },
     featureRow: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-start",
       gap: 12,
     },
     featureIconWrap: {
-      width: 34,
-      height: 34,
-      borderRadius: 12,
+      width: 38,
+      height: 38,
+      borderRadius: 14,
       backgroundColor: theme.surfaceSoft,
+      borderWidth: 1,
+      borderColor: theme.border,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    featureCopy: {
+      flex: 1,
+      gap: 4,
+    },
+    featureTitle: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    featureText: {
+      color: theme.textMuted,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    roleList: {
+      gap: 12,
+    },
+    roleCard: {
+      backgroundColor: theme.surfaceSoft,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 14,
+      gap: 8,
+      overflow: "hidden",
+      position: "relative",
+    },
+    roleIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      backgroundColor: theme.surface,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
       borderColor: theme.border,
     },
-    featureText: {
-      flex: 1,
+    roleTitle: {
       color: theme.text,
       fontSize: 15,
-      fontWeight: "600",
+      fontWeight: "800",
+    },
+    roleText: {
+      color: theme.textMuted,
+      fontSize: 13,
+      lineHeight: 20,
     },
     infoList: {
       gap: 12,
@@ -201,8 +358,8 @@ function createStyles(theme) {
     },
     infoLabel: {
       color: theme.textSoft,
-      fontSize: 13,
-      fontWeight: "700",
+      fontSize: 12,
+      fontWeight: "800",
       textTransform: "uppercase",
       letterSpacing: 0.4,
     },
@@ -213,15 +370,37 @@ function createStyles(theme) {
       textAlign: "right",
       flexShrink: 1,
     },
-    footer: {
-      paddingTop: 4,
-      paddingBottom: 8,
+    footerCard: {
+      backgroundColor: theme.surface,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 18,
+      gap: 8,
       alignItems: "center",
+      overflow: "hidden",
+      position: "relative",
+    },
+    footerAccentRing: {
+      position: "absolute",
+      width: 150,
+      height: 150,
+      borderRadius: 999,
+      borderWidth: 22,
+      borderColor: theme.primarySoft,
+      right: -72,
+      top: -72,
+      opacity: theme.mode === "dark" ? 0.28 : 0.65,
+    },
+    footerTitle: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: "800",
     },
     footerText: {
-      color: theme.textSoft,
-      fontSize: 12,
-      fontWeight: "600",
+      color: theme.textMuted,
+      fontSize: 13,
+      lineHeight: 20,
       textAlign: "center",
     },
   });

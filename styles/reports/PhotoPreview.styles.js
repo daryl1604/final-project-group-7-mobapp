@@ -8,6 +8,16 @@ export function createPhotoPreviewStyles(theme) {
       borderRadius: 22,
       backgroundColor: theme.surfaceSoft,
     },
+    galleryRow: {
+      gap: 10,
+    },
+    galleryImage: {
+      width: 260,
+      height: 220,
+      borderRadius: 22,
+      backgroundColor: theme.surfaceSoft,
+      marginRight: 10,
+    },
     emptyState: {
       height: 120,
       borderRadius: 22,

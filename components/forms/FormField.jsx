@@ -40,6 +40,7 @@ export default function FormField({
           multiline ? styles.inputMultiline : null,
           focused ? styles.inputFocused : null,
           error ? styles.inputError : null,
+          !editable ? styles.inputDisabled : null,
         ]}
         multiline={multiline}
         secureTextEntry={secureTextEntry}

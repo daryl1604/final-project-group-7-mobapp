@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { authThemes } from "../constants/theme";
 import { createId } from "../utils/idUtils";
 import { requestNotificationAccess, sendLocalNotification } from "../utils/notificationUtils";
 import {
+  calculateAgeFromDob,
   findPhoneConflict,
   validatePassword,
   isSamePassword,
@@ -19,8 +20,28 @@ import {
 } from "./appStorage";
 
 const AppContext = createContext(null);
+const CONFIRMATION_CYCLE_WAITING = "waiting_confirmation";
+const CONFIRMATION_CYCLE_REJECTED_PENDING_FEEDBACK = "rejected_pending_feedback";
 
-function createNotification(userId, title, message, type = "info", reportId = null, residentId = null) {
+function getResetConfirmationCycleFields() {
+  return {
+    confirmationCycleState: null,
+    confirmationRejectedAt: null,
+    confirmationFeedbackSubmittedAt: null,
+    confirmationAdminRespondedAt: null,
+  };
+}
+
+function getWaitingConfirmationFields() {
+  return {
+    confirmationCycleState: CONFIRMATION_CYCLE_WAITING,
+    confirmationRejectedAt: null,
+    confirmationFeedbackSubmittedAt: null,
+    confirmationAdminRespondedAt: null,
+  };
+}
+
+function createNotification(userId, title, message, type = "info", reportId = null, residentId = null, details = null) {
   return {
     id: createId("notif"),
     userId,
@@ -30,6 +51,7 @@ function createNotification(userId, title, message, type = "info", reportId = nu
     read: false,
     reportId,
     residentId,
+    details,
     createdAt: new Date().toISOString(),
   };
 }
@@ -53,6 +75,42 @@ function normalizeProfileChanges(changes) {
   };
 }
 
+function getAttachmentName(attachment = {}) {
+  if (typeof attachment.name === "string" && attachment.name.trim()) {
+    return attachment.name.trim();
+  }
+
+  const value = typeof attachment.uri === "string" ? attachment.uri : "";
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || "Attachment";
+}
+
+function isImageAttachment(type, uri = "") {
+  const normalizedUri = String(uri || "").toLowerCase();
+
+  if (normalizedUri.endsWith(".pdf") || normalizedUri.includes(".pdf?")) {
+    return false;
+  }
+
+  if (type === "image") {
+    return true;
+  }
+
+  return /(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.bmp|\.heic)(\?.*)?$/i.test(uri);
+}
+
+function normalizeThreadAttachments(items = []) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => item?.uri)
+    .map((item) => ({
+      id: item.id || createId("attachment"),
+      name: getAttachmentName(item),
+      uri: item.uri.trim(),
+      type: isImageAttachment(item.type, item.uri) ? "image" : "file",
+      ...(item.mimeType ? { mimeType: item.mimeType } : {}),
+    }));
+}
+
 export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState([]);
@@ -66,8 +124,54 @@ export function AppProvider({ children }) {
   const [sessionUser, setSessionUser] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dialogConfig, setDialogConfig] = useState(null);
+  const [inAppNotification, setInAppNotification] = useState(null);
+  const deliveredNotificationIdsRef = useRef(new Set());
+  const notificationsHydratedRef = useRef(false);
+  const inAppNotificationTimeoutRef = useRef(null);
 
   const theme = authThemes[preferences.themeMode] || authThemes.light;
+
+  const showInAppNotification = (item) => {
+    if (!item) {
+      return;
+    }
+
+    setInAppNotification(item);
+
+    if (inAppNotificationTimeoutRef.current) {
+      clearTimeout(inAppNotificationTimeoutRef.current);
+    }
+
+    inAppNotificationTimeoutRef.current = setTimeout(() => {
+      setInAppNotification((current) => (current?.id === item.id ? null : current));
+      inAppNotificationTimeoutRef.current = null;
+    }, 4000);
+  };
+
+  const showNotificationPopup = (item) => {
+    if (!item) {
+      return;
+    }
+
+    showInAppNotification(item);
+    setDialogConfig({
+      title: item.title || "New Notification",
+      message: item.message || "",
+      variant:
+        item.type === "deleted_report" || item.type === "deleted_account"
+          ? "danger"
+          : item.type === "status" || item.type === "feedback" || item.type === "reply"
+            ? "success"
+            : "info",
+      dismissible: true,
+      buttons: [
+        {
+          text: "OK",
+          variant: "primary",
+        },
+      ],
+    });
+  };
 
   const persistState = async (nextState, newNotifications = []) => {
     const nextNotifications = nextState.notifications ?? notifications;
@@ -82,24 +186,24 @@ export function AppProvider({ children }) {
     setReports(persistedState.reports);
     setNotifications(persistedState.notifications);
 
-    if (preferences.notificationsEnabled && sessionUser?.id && newNotifications.length > 0) {
+    if (sessionUser?.id && newNotifications.length > 0) {
       const relevant = newNotifications.filter((item) => item.userId === sessionUser.id);
 
-      for (const item of relevant) {
-        await sendLocalNotification({
-          title: item.title,
-          body: item.message,
-          data: {
-            notificationId: item.id,
-            reportId: item.reportId,
-            type: item.type,
-          },
-        });
+      if (relevant.length > 0) {
+        showNotificationPopup(relevant[relevant.length - 1]);
+        relevant.forEach((item) => deliveredNotificationIdsRef.current.add(item.id));
       }
     }
   };
 
   const hideDialog = () => setDialogConfig(null);
+  const hideInAppNotification = () => {
+    if (inAppNotificationTimeoutRef.current) {
+      clearTimeout(inAppNotificationTimeoutRef.current);
+      inAppNotificationTimeoutRef.current = null;
+    }
+    setInAppNotification(null);
+  };
 
   const pressDialogButton = async (button) => {
     setDialogConfig(null);
@@ -223,6 +327,81 @@ export function AppProvider({ children }) {
     () => sortByLatest(notifications.filter((item) => item.userId === currentUser?.id)),
     [currentUser?.id, notifications]
   );
+
+  useEffect(() => {
+    deliveredNotificationIdsRef.current = new Set();
+    notificationsHydratedRef.current = false;
+    hideInAppNotification();
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (loading || !currentUser?.id) {
+      return;
+    }
+
+    const currentIds = new Set(currentNotifications.map((item) => item.id));
+
+    if (!notificationsHydratedRef.current) {
+      deliveredNotificationIdsRef.current = currentIds;
+      notificationsHydratedRef.current = true;
+      return;
+    }
+
+    const pendingNotifications = [...currentNotifications]
+      .filter((item) => !deliveredNotificationIdsRef.current.has(item.id))
+      .reverse();
+
+    if (!pendingNotifications.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function deliverNotifications() {
+      for (const item of pendingNotifications) {
+        if (cancelled) {
+          return;
+        }
+
+        showNotificationPopup(item);
+
+        if (preferences.notificationsEnabled && preferences.notificationsPermission === "granted") {
+          await sendLocalNotification({
+            title: item.title,
+            body: item.message,
+            data: {
+              notificationId: item.id,
+              reportId: item.reportId,
+              type: item.type,
+              details: item.details,
+            },
+          });
+        }
+
+        deliveredNotificationIdsRef.current.add(item.id);
+      }
+    }
+
+    deliverNotifications();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentNotifications,
+    currentUser?.id,
+    loading,
+    preferences.notificationsEnabled,
+    preferences.notificationsPermission,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (inAppNotificationTimeoutRef.current) {
+        clearTimeout(inAppNotificationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const unreadNotificationsCount = useMemo(
     () => currentNotifications.filter((item) => !item.read).length,
@@ -463,8 +642,48 @@ export function AppProvider({ children }) {
     await persistState({ accounts, reports, notifications: nextNotifications });
   };
 
+  const sendAnnouncement = async (adminId, message) => {
+    const admin = accounts.find((account) => account.id === adminId);
+    const trimmedMessage = String(message || "").trim();
+
+    if (!admin || trimmedMessage.length < 10 || !/[A-Za-z0-9]/.test(trimmedMessage)) {
+      throw new Error("Message must contain meaningful text (min 10 characters)");
+    }
+
+    const residentNotifications = accounts
+      .filter((account) => account.role === "resident")
+      .map((resident) =>
+        createNotification(
+          resident.id,
+          "Barangay Announcement",
+          trimmedMessage,
+          "announcement",
+          null,
+          resident.id,
+          {
+            fullMessage: trimmedMessage,
+            sentBy: admin.fullName,
+          }
+        )
+      );
+
+    await persistState(
+      {
+        accounts,
+        reports,
+        notifications: [...notifications, ...residentNotifications],
+      },
+      residentNotifications
+    );
+  };
+
   const submitReport = async (payload) => {
     const resident = accounts.find((account) => account.id === payload.residentId);
+    const normalizedPhotoUris = Array.isArray(payload.photoUris)
+      ? payload.photoUris.filter(Boolean).slice(0, 5)
+      : payload.photoUri
+        ? [payload.photoUri]
+        : [];
     const nextReport = {
       id: createId("report"),
       residentId: payload.residentId,
@@ -474,9 +693,11 @@ export function AppProvider({ children }) {
       purok: payload.purok,
       date: payload.date,
       time: payload.time,
-      photoUri: payload.photoUri || "",
+      photoUri: normalizedPhotoUris[0] || payload.photoUri || "",
+      photoUris: normalizedPhotoUris,
       location: payload.location,
       status: "Pending",
+      ...getResetConfirmationCycleFields(),
       adminFeedback: [],
       residentReplies: [],
       createdAt: new Date().toISOString(),
@@ -485,7 +706,7 @@ export function AppProvider({ children }) {
 
     const adminAccounts = accounts.filter((account) => account.role === "admin");
     const createdNotifications = [
-      createNotification(payload.residentId, "Report Submitted", "Your report has been saved locally.", "report", nextReport.id),
+      createNotification(payload.residentId, "Report Submitted", "Your report has been successfully sent.", "report", nextReport.id),
       ...adminAccounts.map((admin) =>
         createNotification(
           admin.id,
@@ -533,7 +754,7 @@ export function AppProvider({ children }) {
     );
   };
 
-  const updateReportStatus = async (reportId, status, actorId) => {
+  const updateReportStatus = async (reportId, status, actorId, notificationOverrides = {}) => {
     const report = reports.find((item) => item.id === reportId);
     const actor = accounts.find((item) => item.id === actorId);
 
@@ -541,13 +762,35 @@ export function AppProvider({ children }) {
       return;
     }
 
-    const nextReports = reports.map((item) =>
-      item.id === reportId ? { ...item, status, updatedAt: new Date().toISOString() } : item
-    );
+    const nextReports = reports.map((item) => {
+      if (item.id !== reportId) {
+        return item;
+      }
+
+      const confirmationCycleFields =
+        status === "For Confirmation"
+          ? getWaitingConfirmationFields()
+          : status === "Resolved" || status === "Rejected" || status === "Ongoing" || status === "Pending"
+            ? getResetConfirmationCycleFields()
+            : {};
+
+      return {
+        ...item,
+        status,
+        ...confirmationCycleFields,
+        updatedAt: new Date().toISOString(),
+      };
+    });
 
     const reportOwnerNotification =
       actor.role === "admin"
-        ? createNotification(report.residentId, "Report Status Updated", `Your report is now marked as ${status}.`, "status", reportId)
+        ? createNotification(
+            report.residentId,
+            notificationOverrides.reportOwnerTitle || "Report Status Updated",
+            notificationOverrides.reportOwnerMessage || `Your report is now marked as ${status}.`,
+            "status",
+            reportId
+          )
         : null;
 
     const adminNotifications =
@@ -557,8 +800,8 @@ export function AppProvider({ children }) {
             .map((admin) =>
               createNotification(
                 admin.id,
-                "Resident Response Received",
-                `${report.residentName} updated the report status to ${status}.`,
+                notificationOverrides.adminTitle || "Resident Response Received",
+                notificationOverrides.adminMessage || `${report.residentName} updated the report status to ${status}.`,
                 "status",
                 reportId
               )
@@ -577,7 +820,51 @@ export function AppProvider({ children }) {
     );
   };
 
-  const addAdminFeedback = async (reportId, adminId, text) => {
+  const requestReportConfirmationFollowUp = async (reportId, residentId) => {
+    const report = reports.find((item) => item.id === reportId);
+    const resident = accounts.find((item) => item.id === residentId);
+
+    if (!report || !resident || report.residentId !== residentId || report.status !== "For Confirmation") {
+      return;
+    }
+
+    const nextReports = reports.map((item) =>
+      item.id === reportId
+        ? {
+            ...item,
+            status: "Ongoing",
+            confirmationCycleState: CONFIRMATION_CYCLE_REJECTED_PENDING_FEEDBACK,
+            confirmationRejectedAt: new Date().toISOString(),
+            confirmationFeedbackSubmittedAt: null,
+            confirmationAdminRespondedAt: null,
+            updatedAt: new Date().toISOString(),
+          }
+        : item
+    );
+
+    const createdNotifications = accounts
+      .filter((item) => item.role === "admin")
+      .map((admin) =>
+        createNotification(
+          admin.id,
+          "Resident requested follow-up",
+          `${resident.fullName} marked the report as not yet resolved and returned it to ongoing.`,
+          "status",
+          reportId
+        )
+      );
+
+    await persistState(
+      {
+        accounts,
+        reports: nextReports,
+        notifications: [...notifications, ...createdNotifications],
+      },
+      createdNotifications
+    );
+  };
+
+  const addAdminFeedback = async (reportId, adminId, input, notificationOverrides = {}) => {
     const admin = accounts.find((account) => account.id === adminId);
     const report = reports.find((item) => item.id === reportId);
 
@@ -585,26 +872,44 @@ export function AppProvider({ children }) {
       return;
     }
 
+    const payload = typeof input === "string" ? { text: input } : input || {};
+
     const nextFeedback = {
       id: createId("feedback"),
-      text: text.trim(),
+      text: String(payload.text || "").trim(),
       authorId: adminId,
       authorName: admin.fullName,
       createdAt: new Date().toISOString(),
+      replyToId: payload.replyToId || null,
+      attachments: normalizeThreadAttachments(payload.attachments),
     };
 
-    const nextReports = reports.map((item) =>
-      item.id === reportId
-        ? {
-            ...item,
-            adminFeedback: [...item.adminFeedback, nextFeedback],
-            updatedAt: new Date().toISOString(),
-          }
-        : item
-    );
+    const nextReports = reports.map((item) => {
+      if (item.id !== reportId) {
+        return item;
+      }
+
+      const confirmationCycleFields =
+        item.confirmationCycleState === CONFIRMATION_CYCLE_REJECTED_PENDING_FEEDBACK && item.confirmationFeedbackSubmittedAt
+          ? { confirmationAdminRespondedAt: new Date().toISOString() }
+          : {};
+
+      return {
+        ...item,
+        ...confirmationCycleFields,
+        adminFeedback: [...item.adminFeedback, nextFeedback],
+        updatedAt: new Date().toISOString(),
+      };
+    });
 
     const createdNotifications = [
-      createNotification(report.residentId, "Admin Feedback Added", "Barangay admin added feedback to your report.", "feedback", reportId),
+      createNotification(
+        report.residentId,
+        notificationOverrides.reportOwnerTitle || "Admin Feedback Added",
+        notificationOverrides.reportOwnerMessage || "Barangay admin added feedback to your report.",
+        "feedback",
+        reportId
+      ),
     ];
 
     await persistState(
@@ -633,36 +938,100 @@ export function AppProvider({ children }) {
     await persistState({ accounts, reports: nextReports, notifications });
   };
 
-  const addResidentReply = async (reportId, residentId, text) => {
+  const addResidentReply = async (reportId, residentId, input, notificationOverrides = {}) => {
     const resident = accounts.find((account) => account.id === residentId);
 
     if (!resident) {
       return;
     }
 
+    const payload = typeof input === "string" ? { text: input } : input || {};
+
     const nextReply = {
       id: createId("reply"),
-      text: text.trim(),
+      text: String(payload.text || "").trim(),
       authorId: residentId,
       authorName: resident.fullName,
       createdAt: new Date().toISOString(),
+      replyToId: payload.replyToId || null,
+      attachments: normalizeThreadAttachments(payload.attachments),
     };
+
+    const nextReports = reports.map((item) => {
+      if (item.id !== reportId) {
+        return item;
+      }
+
+      const confirmationCycleFields =
+        item.confirmationCycleState === CONFIRMATION_CYCLE_REJECTED_PENDING_FEEDBACK
+          ? { confirmationFeedbackSubmittedAt: new Date().toISOString() }
+          : {};
+
+      return {
+        ...item,
+        ...confirmationCycleFields,
+        residentReplies: [...item.residentReplies, nextReply],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    const createdNotifications = accounts
+      .filter((item) => item.role === "admin")
+      .map((admin) =>
+        createNotification(
+          admin.id,
+          notificationOverrides.adminTitle || "Resident Reply Added",
+          notificationOverrides.adminMessage || `${resident.fullName} replied to a report feedback thread.`,
+          "reply",
+          reportId
+        )
+      );
+
+    await persistState(
+      {
+        accounts,
+        reports: nextReports,
+        notifications: [...notifications, ...createdNotifications],
+      },
+      createdNotifications
+    );
+  };
+
+  const reopenReportConfirmation = async (reportId, adminId) => {
+    const report = reports.find((item) => item.id === reportId);
+    const admin = accounts.find((item) => item.id === adminId);
+
+    if (
+      !report ||
+      !admin ||
+      admin.role !== "admin" ||
+      report.status !== "For Confirmation" ||
+      report.confirmationCycleState !== CONFIRMATION_CYCLE_REJECTED_PENDING_FEEDBACK ||
+      !report.confirmationFeedbackSubmittedAt ||
+      !report.confirmationAdminRespondedAt
+    ) {
+      return;
+    }
 
     const nextReports = reports.map((item) =>
       item.id === reportId
         ? {
             ...item,
-            residentReplies: [...item.residentReplies, nextReply],
+            ...getWaitingConfirmationFields(),
             updatedAt: new Date().toISOString(),
           }
         : item
     );
 
-    const createdNotifications = accounts
-      .filter((item) => item.role === "admin")
-      .map((admin) =>
-        createNotification(admin.id, "Resident Reply Added", `${resident.fullName} replied to a report feedback thread.`, "reply", reportId)
-      );
+    const createdNotifications = [
+      createNotification(
+        report.residentId,
+        "Report Reopened for Confirmation",
+        "The barangay replied and reopened your report for confirmation.",
+        "status",
+        reportId
+      ),
+    ];
 
     await persistState(
       {
@@ -678,6 +1047,9 @@ export function AppProvider({ children }) {
     const normalizedEmail = payload.email.trim().toLowerCase();
     const normalizedPhone = normalizePhoneNumber(payload.contactNumber);
     const timestamp = new Date().toISOString();
+    const residentDateOfBirth = payload.dateOfBirth || "";
+    const residentGender = payload.gender || "Prefer not to say";
+    const residentAge = payload.age || calculateAgeFromDob(residentDateOfBirth);
 
     if (accounts.some((item) => item.email.trim().toLowerCase() === normalizedEmail)) {
       throw new Error("Email is already in use.");
@@ -696,7 +1068,9 @@ export function AppProvider({ children }) {
       purok: payload.purok,
       address: payload.address?.trim() || "",
       contactNumber: normalizedPhone,
-      dateOfBirth: payload.dateOfBirth || "",
+      dateOfBirth: residentDateOfBirth,
+      gender: residentGender,
+      age: residentAge ? Number(residentAge) : "",
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -716,13 +1090,44 @@ export function AppProvider({ children }) {
     );
   };
 
-  const deleteResidentAccount = async (residentId, adminId) => {
+  const deleteResidentAccount = async (residentId, adminId, options = {}) => {
     const resident = accounts.find((item) => item.id === residentId);
     const nextAccounts = accounts.filter((item) => item.id !== residentId);
     const nextReports = reports.filter((report) => report.residentId !== residentId);
     const nextNotifications = notifications.filter((item) => item.userId !== residentId);
+    const deletedAt = new Date().toISOString();
+    const adminMessage = options.message?.trim() || "";
     const createdNotifications = resident
-      ? [createNotification(adminId, "Resident Deleted", `${resident.fullName}'s account was removed.`, "account")]
+      ? [
+          createNotification(
+            residentId,
+            "Account Deleted",
+            adminMessage
+              ? `Your account has been deleted by admin. ${adminMessage}`
+              : "Your account has been deleted by admin.",
+            "deleted_account",
+            null,
+            residentId,
+            {
+              residentName: resident.fullName,
+              message: adminMessage,
+              deletedAt,
+            }
+          ),
+          createNotification(
+            adminId,
+            "Resident Deleted",
+            `${resident.fullName}'s account was removed.${adminMessage ? ` Reason: ${adminMessage}` : ""}`,
+            "account",
+            null,
+            residentId,
+            {
+              residentName: resident.fullName,
+              message: adminMessage,
+              deletedAt,
+            }
+          ),
+        ]
       : [];
 
     await persistState(
@@ -735,7 +1140,7 @@ export function AppProvider({ children }) {
     );
   };
 
-  const deleteCurrentAccount = async () => {
+  const deleteCurrentAccount = async (options = {}) => {
     if (!currentUser) {
       throw new Error("Account not found.");
     }
@@ -745,24 +1150,76 @@ export function AppProvider({ children }) {
       ? reports.filter((report) => report.residentId !== currentUser.id)
       : reports;
     const nextNotifications = notifications.filter((item) => item.userId !== currentUser.id);
+    const deletedAt = new Date().toISOString();
+    const feedback = options.message?.trim() || "";
+    const createdNotifications = currentUser.role === "resident"
+      ? accounts
+          .filter((item) => item.role === "admin")
+          .map((admin) =>
+            createNotification(
+              admin.id,
+              "Resident Account Deleted",
+              feedback
+                ? `${currentUser.fullName} deleted their account. Feedback: ${feedback}`
+                : `${currentUser.fullName} deleted their account.`,
+              "account",
+              null,
+              currentUser.id,
+              {
+                residentName: currentUser.fullName,
+                message: feedback,
+                deletedAt,
+              }
+            )
+          )
+      : [];
 
-    await persistState({
-      accounts: nextAccounts,
-      reports: nextReports,
-      notifications: nextNotifications,
-    });
+    await persistState(
+      {
+        accounts: nextAccounts,
+        reports: nextReports,
+        notifications: [...nextNotifications, ...createdNotifications],
+      },
+      createdNotifications
+    );
 
     await clearSession();
     setSessionUser(null);
   };
 
-  const deleteReport = async (reportId, adminId) => {
+  const deleteReport = async (reportId, adminId, options = {}) => {
     const report = reports.find((item) => item.id === reportId);
     const nextReports = reports.filter((item) => item.id !== reportId);
+    const deletedAt = new Date().toISOString();
+    const adminMessage = options.message?.trim() || "";
     const createdNotifications = report
       ? [
-          createNotification(report.residentId, "Report Removed", "An admin removed your report entry.", "report", reportId),
-          createNotification(adminId, "Report Deleted", `A report from ${report.residentName} was deleted.`, "report", reportId),
+          createNotification(
+            report.residentId,
+            "Report Deleted",
+            adminMessage ? "Your report has been deleted." : "Your report has been deleted.",
+            "deleted_report",
+            reportId,
+            report.residentId,
+            {
+              reportTitle: report.incidentType,
+              message: adminMessage,
+              deletedAt,
+            }
+          ),
+          createNotification(
+            adminId,
+            "Report Deleted",
+            `A report from ${report.residentName} was deleted.${adminMessage ? ` Reason: ${adminMessage}` : ""}`,
+            "report",
+            reportId,
+            report.residentId,
+            {
+              reportTitle: report.incidentType,
+              message: adminMessage,
+              deletedAt,
+            }
+          ),
         ]
       : [];
 
@@ -783,13 +1240,23 @@ export function AppProvider({ children }) {
   const requestNotificationPermission = async () => {
     const permission = await requestNotificationAccess();
     const nextPreferences = await persistPreferences({
+      notificationsEnabled: permission.granted,
       notificationsPermission: permission.status,
     });
 
-    return nextPreferences.notificationsEnabled;
+    return permission.granted && nextPreferences.notificationsEnabled;
   };
 
   const setNotificationsEnabled = async (enabled) => {
+    if (enabled && preferences.notificationsPermission !== "granted") {
+      const permission = await requestNotificationAccess();
+      const nextPreferences = await persistPreferences({
+        notificationsEnabled: permission.granted,
+        notificationsPermission: permission.status,
+      });
+      return nextPreferences.notificationsEnabled;
+    }
+
     const nextPreferences = await persistPreferences({ notificationsEnabled: enabled });
     return nextPreferences.notificationsEnabled;
   };
@@ -805,6 +1272,7 @@ export function AppProvider({ children }) {
     notifications,
     preferences,
     dialogConfig,
+    inAppNotification,
     theme,
     drawerOpen,
     currentUser,
@@ -820,12 +1288,15 @@ export function AppProvider({ children }) {
     updateProfile,
     markNotificationRead,
     deleteNotification,
+    sendAnnouncement,
     submitReport,
     updateResidentReport,
     updateReportStatus,
+    requestReportConfirmationFollowUp,
     addAdminFeedback,
     editAdminFeedback,
     addResidentReply,
+    reopenReportConfirmation,
     addResidentAccount,
     deleteResidentAccount,
     deleteCurrentAccount,
@@ -836,6 +1307,7 @@ export function AppProvider({ children }) {
     showAlert,
     showConfirmation,
     hideDialog,
+    hideInAppNotification,
     pressDialogButton,
     openDrawer,
     closeDrawer,

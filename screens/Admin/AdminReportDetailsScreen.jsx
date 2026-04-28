@@ -1,13 +1,14 @@
-import { useMemo, useRef, useState } from "react";
-import * as DocumentPicker from "expo-document-picker";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import * as IntentLauncher from "expo-intent-launcher";
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { InteractionManager } from "react-native";
+import { Image, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import AppHeader from "../../components/common/AppHeader";
 import PrimaryButton from "../../components/common/PrimaryButton";
 import ScreenContainer from "../../components/common/ScreenContainer";
+import TypedConfirmationModal from "../../components/common/TypedConfirmationModal";
 import FormField from "../../components/forms/FormField";
 import PhotoPreview from "../../components/reports/PhotoPreview";
 import { useApp } from "../../storage/AppProvider";
@@ -15,6 +16,8 @@ import { formatDate, formatTime } from "../../utils/dateUtils";
 
 const FEEDBACK_LIMIT = 500;
 const STATUS_OPTIONS = ["Pending", "Ongoing", "For Confirmation", "Resolved", "Rejected"];
+const CONFIRMATION_CYCLE_WAITING = "waiting_confirmation";
+const CONFIRMATION_CYCLE_REJECTED_PENDING_FEEDBACK = "rejected_pending_feedback";
 
 function createLocalId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -26,10 +29,16 @@ function getItemTimestamp(value) {
 }
 
 function isImageUri(value = "") {
-  return /(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.bmp|\.heic)$/i.test(value) || value.startsWith("file:");
+  return /(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.bmp|\.heic)(\?.*)?$/i.test(value);
 }
 
 function normalizeAttachmentType(type, uri) {
+  const normalizedUri = String(uri || "").toLowerCase();
+
+  if (normalizedUri.endsWith(".pdf") || normalizedUri.includes(".pdf?")) {
+    return "file";
+  }
+
   if (type === "image") {
     return "image";
   }
@@ -228,9 +237,11 @@ function getStatusHelperText(currentStatus, nextStatus) {
 
 export default function AdminReportDetailsScreen({ route, navigation }) {
   const { reportId } = route.params;
+  const scrollTarget = route?.params?.scrollTo;
   const {
     currentUser,
     reports,
+    addAdminFeedback,
     updateResidentReport,
     updateReportStatus,
     deleteReport,
@@ -245,19 +256,17 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
   const [replyTargetId, setReplyTargetId] = useState(null);
   const [composerAttachments, setComposerAttachments] = useState([]);
   const [previewAttachment, setPreviewAttachment] = useState(null);
+  const [deleteReportModalVisible, setDeleteReportModalVisible] = useState(false);
   const scrollRef = useRef(null);
   const feedbackInputRef = useRef(null);
+  const [feedbackSectionY, setFeedbackSectionY] = useState(null);
+  const [composerSectionY, setComposerSectionY] = useState(null);
   const report = useMemo(() => reports.find((item) => item.id === reportId), [reportId, reports]);
   const styles = createStyles(theme);
-
-  if (!report) {
-    return null;
-  }
-
-  const summaryIcon = getSummaryIcon(report.incidentType, theme);
-  const statusTone = getStatusTone(report.status, theme);
-  const visibleFeedback = report.adminFeedback || [];
-  const visibleReplies = report.residentReplies || [];
+  const summaryIcon = getSummaryIcon(report?.incidentType, theme);
+  const statusTone = getStatusTone(report?.status, theme);
+  const visibleFeedback = report?.adminFeedback || [];
+  const visibleReplies = report?.residentReplies || [];
   const threadItems = useMemo(
     () =>
       [
@@ -278,11 +287,64 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
   const hasThreadItems = threadItems.length > 0;
   const feedbackCount = feedbackText.length;
   const sectionAccentColor = statusTone.text;
-  const statusLocked = isStatusLocked(report.status);
+  const statusLocked = report ? isStatusLocked(report.status) : true;
+  const confirmationCycleState = report?.confirmationCycleState || null;
+  const confirmationLocked = confirmationCycleState === CONFIRMATION_CYCLE_REJECTED_PENDING_FEEDBACK;
+  const residentFeedbackSubmitted = Boolean(report?.confirmationFeedbackSubmittedAt);
+  const adminRespondedToLockedCycle = Boolean(report?.confirmationAdminRespondedAt);
+  const shouldPromptStatusUpdateAfterFeedback =
+    confirmationLocked && residentFeedbackSubmitted && !adminRespondedToLockedCycle;
+
+  const scrollToFeedbackSection = () => {
+    if (feedbackSectionY !== null) {
+      scrollRef.current?.scrollTo?.({
+        y: Math.max(feedbackSectionY - 12, 0),
+        animated: true,
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!report) {
+      navigation.goBack();
+    }
+  }, [navigation, report]);
+
+  useEffect(() => {
+    if (scrollTarget !== "feedback") {
+      return;
+    }
+
+    if (feedbackSectionY === null) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      scrollToFeedbackSection();
+      navigation.setParams({ scrollTo: undefined });
+    }, 260);
+
+    return () => clearTimeout(timeoutId);
+  }, [feedbackSectionY, navigation, scrollTarget]);
+
+  if (!report) {
+    return null;
+  }
 
   const focusFeedback = () => {
     requestAnimationFrame(() => {
-      scrollRef.current?.scrollToEnd?.({ animated: true });
+      if (composerSectionY !== null) {
+        scrollRef.current?.scrollTo?.({
+          y: Math.max(composerSectionY - 96, 0),
+          animated: true,
+        });
+      } else {
+        scrollRef.current?.scrollToEnd?.({ animated: true });
+      }
+
+      setTimeout(() => {
+        feedbackInputRef.current?.focus?.();
+      }, 220);
     });
   };
 
@@ -305,35 +367,40 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
   };
 
   const saveAdminFeedback = async ({ text, attachments, replyToId = null, feedbackId = null }) => {
-    const nextFeedback = {
-      id: feedbackId || createLocalId("feedback"),
-      text: text.trim(),
-      authorId: currentUser.id,
-      authorName: currentUser.fullName,
-      createdAt: feedbackId ? undefined : new Date().toISOString(),
-      editedAt: feedbackId ? new Date().toISOString() : undefined,
-      replyToId: replyToId || null,
-      attachments: attachments.map((item) => ({
-        id: item.id || createLocalId("attachment"),
-        name: getAttachmentName(item),
-        uri: item.uri.trim(),
-        type: normalizeAttachmentType(item.type, item.uri),
-      })),
-    };
+    const normalizedAttachments = attachments
+      .filter((item) => normalizeAttachmentType(item.type, item.uri) === "image")
+      .map((item) => ({
+      id: item.id || createLocalId("attachment"),
+      name: getAttachmentName(item),
+      uri: item.uri.trim(),
+      type: normalizeAttachmentType(item.type, item.uri),
+      ...(item.mimeType ? { mimeType: item.mimeType } : {}),
+      }));
 
-    const nextAdminFeedback = feedbackId
-      ? visibleFeedback.map((item) =>
-          item.id === feedbackId
-            ? {
-                ...item,
-                text: nextFeedback.text,
-                editedAt: nextFeedback.editedAt,
-                replyToId: nextFeedback.replyToId,
-                attachments: nextFeedback.attachments,
-              }
-            : item
-        )
-      : [...visibleFeedback, nextFeedback];
+    if (!feedbackId) {
+      await addAdminFeedback(
+        report.id,
+        currentUser.id,
+        {
+          text: text.trim(),
+          replyToId: replyToId || null,
+          attachments: normalizedAttachments,
+        }
+      );
+      return;
+    }
+
+    const nextAdminFeedback = visibleFeedback.map((item) =>
+      item.id === feedbackId
+        ? {
+            ...item,
+            text: text.trim(),
+            editedAt: new Date().toISOString(),
+            replyToId: replyToId || null,
+            attachments: normalizedAttachments,
+          }
+        : item
+    );
 
     await updateResidentReport(report.id, { adminFeedback: nextAdminFeedback });
   };
@@ -355,6 +422,18 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
 
     if (editingFeedbackId) {
       showAlert("Feedback updated", "Your feedback was updated successfully.", { variant: "success" });
+    } else if (shouldPromptStatusUpdateAfterFeedback) {
+      showConfirmation({
+        title: "Update report status?",
+        message: "Would you like to update the report status?",
+        variant: "info",
+        confirmText: "Yes",
+        cancelText: "Later",
+        confirmVariant: "primary",
+        onConfirm: () => {
+          setStatusMenuOpen(true);
+        },
+      });
     } else {
       showAlert("Feedback added", "Your feedback was added successfully.", { variant: "success" });
     }
@@ -371,14 +450,24 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
     setEditingFeedbackId(feedback.id);
     setFeedbackText(feedback.text);
     setReplyTargetId(feedback.replyToId || null);
-    setComposerAttachments(feedback.attachments || []);
+    setComposerAttachments((feedback.attachments || []).filter((item) => normalizeAttachmentType(item.type, item.uri) === "image"));
     focusFeedback();
   };
 
   const startReply = (item) => {
+    const shouldWaitForSheetClose = !!selectedFeedback;
     setSelectedFeedback(null);
     setEditingFeedbackId(null);
     setReplyTargetId(item.id);
+    if (shouldWaitForSheetClose) {
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => {
+          focusFeedback();
+        }, 120);
+      });
+      return;
+    }
+
     focusFeedback();
   };
 
@@ -441,57 +530,20 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
     ]);
   };
 
-  const handlePickFileAttachment = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: "*/*",
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
-
-    if (result.canceled) {
-      return;
-    }
-
-    const asset = result.assets?.[0];
-    const nextUri = asset?.uri?.trim();
-
-    if (!nextUri) {
-      showAlert("Attachment unavailable", "The selected file could not be attached.", { variant: "info" });
-      return;
-    }
-
-    setComposerAttachments((current) => [
-      ...current,
-      {
-        id: createLocalId("attachment"),
-        type: normalizeAttachmentType(asset?.mimeType?.startsWith("image/") ? "image" : "file", nextUri),
-        name: asset?.name?.trim() || getAttachmentName({ uri: nextUri }),
-        uri: nextUri,
-        mimeType: asset?.mimeType || "",
-      },
-    ]);
-  };
-
   const removeAttachment = (attachmentId) => {
     setComposerAttachments((current) => current.filter((item) => item.id !== attachmentId));
   };
 
-  const openAttachment = async (attachment) => {
+  const openFileAttachment = async (attachment) => {
     if (!attachment?.uri) {
       showAlert("Attachment unavailable", "This attachment does not have a valid link yet.", { variant: "info" });
       return;
     }
-
-    if (normalizeAttachmentType(attachment.type, attachment.uri) === "image") {
-      setPreviewAttachment(attachment);
-      return;
-    }
-
     try {
       const fileUri = attachment.uri.trim();
 
-      if (Platform.OS === "android" && fileUri.startsWith("file:")) {
-        const contentUri = await FileSystem.getContentUriAsync(fileUri);
+      if (Platform.OS === "android" && (fileUri.startsWith("file:") || fileUri.startsWith("content:"))) {
+        const contentUri = fileUri.startsWith("file:") ? await FileSystem.getContentUriAsync(fileUri) : fileUri;
         await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.VIEW, {
           data: contentUri,
           flags: IntentLauncher.IntentFlags.FLAG_GRANT_READ_URI_PERMISSION,
@@ -516,6 +568,69 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
         { variant: "info" }
       );
     }
+  };
+
+  const downloadPdfAttachment = async (attachment) => {
+    if (!attachment?.uri) {
+      showAlert("Attachment unavailable", "This PDF does not have a valid link yet.", { variant: "info" });
+      return;
+    }
+
+    try {
+      const fileUri = attachment.uri.trim();
+
+      if (Platform.OS === "android") {
+        const shareUri = fileUri.startsWith("file:") ? await FileSystem.getContentUriAsync(fileUri) : fileUri;
+        await IntentLauncher.startActivityAsync("android.intent.action.SEND", {
+          type: "application/pdf",
+          flags: IntentLauncher.IntentFlags.FLAG_GRANT_READ_URI_PERMISSION,
+          extra: {
+            "android.intent.extra.STREAM": shareUri,
+          },
+        });
+        return;
+      }
+
+      await Share.share({
+        url: fileUri,
+        title: getAttachmentName(attachment),
+      });
+    } catch {
+      showAlert(
+        "Unable to download PDF",
+        "This device could not open a share or download option for the selected PDF.",
+        { variant: "info" }
+      );
+    }
+  };
+
+  const openAttachment = async (attachment) => {
+    if (!attachment?.uri) {
+      showAlert("Attachment unavailable", "This attachment does not have a valid link yet.", { variant: "info" });
+      return;
+    }
+
+    if (normalizeAttachmentType(attachment.type, attachment.uri) === "image") {
+      setPreviewAttachment(attachment);
+      return;
+    }
+
+    if (isPdfAttachment(attachment)) {
+      showConfirmation({
+        title: "Download PDF?",
+        message: "Are you sure you want to download/open this PDF file?",
+        variant: "info",
+        confirmText: "Download",
+        cancelText: "Cancel",
+        confirmVariant: "primary",
+        onConfirm: async () => {
+          await downloadPdfAttachment(attachment);
+        },
+      });
+      return;
+    }
+
+    await openFileAttachment(attachment);
   };
 
   const applyStatusUpdate = async (nextStatus) => {
@@ -589,7 +704,7 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
     if (nextStatus === "For Confirmation" || nextStatus === "Resolved" || nextStatus === "Rejected") {
       showConfirmation({
         title: "Update status?",
-        message: "Are you sure you want to update the status? You will not be able to change this later.",
+        message: "Are you sure you want to update the status?",
         confirmText: "Yes",
         cancelText: "No",
         confirmVariant: "primary",
@@ -616,24 +731,7 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
   };
 
   const confirmDelete = () => {
-    showConfirmation({
-      title: "Delete report?",
-      message: "Remove this report from local storage? The resident will also receive a deletion update.",
-      confirmText: "Delete",
-      onConfirm: async () => {
-        await deleteReport(report.id, currentUser.id);
-        showAlert("Report deleted", "The report was removed successfully.", {
-          variant: "success",
-          buttons: [
-            {
-              text: "OK",
-              variant: "primary",
-              onPress: () => navigation.goBack(),
-            },
-          ],
-        });
-      },
-    });
+    setDeleteReportModalVisible(true);
   };
 
   const openLocationMap = async () => {
@@ -732,14 +830,34 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
         </View>
       </View>
 
-      <View style={styles.accentCardShell}>
+      {confirmationLocked ? (
+        <View style={styles.sectionCard}>
+          <View style={styles.confirmationCycleCard}>
+            <View style={styles.confirmationCycleHeader}>
+              <Ionicons
+                name="git-compare-outline"
+                size={18}
+                color="#b56eff"
+              />
+              <Text style={styles.confirmationCycleTitle}>Confirmation Cycle</Text>
+            </View>
+            <Text style={styles.confirmationCycleText}>
+              {residentFeedbackSubmitted
+                ? adminRespondedToLockedCycle
+                  ? "You replied to the resident. Use the existing status picker when you're ready to send the report back for confirmation."
+                  : "Resident feedback is in. Reply in the thread before updating the report status."
+                : "Resident selected Not Yet Resolved. Waiting for the resident's required feedback."}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.accentCardShell} onLayout={(event) => setComposerSectionY(event.nativeEvent.layout.y)}>
         <View style={[styles.sectionAccent, { backgroundColor: sectionAccentColor }]} />
         <View style={styles.accentCardContent}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Photos</Text>
-          </View>
+          <Text style={styles.sectionTitle}>Photos</Text>
           <View style={styles.photoWrap}>
-            <PhotoPreview uri={report.photoUri} />
+            <PhotoPreview uri={report.photoUri} uris={report.photoUris} />
           </View>
         </View>
       </View>
@@ -785,12 +903,10 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
         </View>
       </View>
 
-      <View style={styles.accentCardShell}>
+      <View style={styles.accentCardShell} onLayout={(event) => setFeedbackSectionY(event.nativeEvent.layout.y)}>
         <View style={[styles.sectionAccent, { backgroundColor: sectionAccentColor }]} />
         <View style={styles.accentCardContent}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Feedback Thread</Text>
-          </View>
+          <Text style={styles.sectionTitle}>Feedback Thread</Text>
 
           {!hasThreadItems ? (
             <View style={styles.threadEmptyState}>
@@ -870,7 +986,7 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
         </View>
       </View>
 
-      <View style={styles.accentCardShell}>
+      <View style={styles.accentCardShell} onLayout={(event) => setComposerSectionY(event.nativeEvent.layout.y)}>
         <View style={[styles.sectionAccent, { backgroundColor: sectionAccentColor }]} />
         <View style={styles.accentCardContent}>
           <Text style={styles.inputSectionTitle}>{editingFeedbackId ? "Edit feedback" : replyTarget ? "Reply to message" : "Add feedback"}</Text>
@@ -899,10 +1015,8 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
           <Text style={styles.characterCount}>{feedbackCount}/{FEEDBACK_LIMIT}</Text>
           <View style={styles.attachmentActionRow}>
             <Pressable style={styles.inlineAction} onPress={handlePickImageAttachment}>
+              <Ionicons name="image-outline" size={18} color={theme.primary} />
               <Text style={styles.inlineActionText}>Attach Image</Text>
-            </Pressable>
-            <Pressable style={styles.inlineAction} onPress={handlePickFileAttachment}>
-              <Text style={styles.inlineActionText}>Attach File</Text>
             </Pressable>
           </View>
           {composerAttachments.length ? (
@@ -1027,6 +1141,25 @@ export default function AdminReportDetailsScreen({ route, navigation }) {
           </ScrollView>
         </View>
       </Modal>
+
+      <TypedConfirmationModal
+        visible={deleteReportModalVisible}
+        title="Delete Report"
+        instruction={'Type "DELETE REPORT" to confirm'}
+        confirmPhrase="DELETE REPORT"
+        reasonPrompt="Would you like to leave a message explaining why this report is deleted?"
+        reasonPlaceholder="Enter message (optional but recommended)"
+        confirmLabel="Delete Report"
+        onClose={() => setDeleteReportModalVisible(false)}
+        onConfirm={async ({ message }) => {
+          setDeleteReportModalVisible(false);
+          await deleteReport(report.id, currentUser.id, { message });
+          navigation.goBack();
+          showAlert("Report deleted", "The report was removed successfully.", {
+            variant: "success",
+          });
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -1035,8 +1168,8 @@ function createStyles(theme) {
   return StyleSheet.create({
     summaryCardShell: {
       flexDirection: "row",
-      borderRadius: 28,
       overflow: "hidden",
+      borderRadius: 28,
       backgroundColor: theme.surface,
       borderWidth: 1,
       borderColor: theme.border,
@@ -1108,7 +1241,7 @@ function createStyles(theme) {
       flexDirection: "row",
       alignItems: "center",
       flexWrap: "wrap",
-      gap: 6,
+      gap: 10,
     },
     namePill: {
       paddingHorizontal: 12,
@@ -1157,16 +1290,71 @@ function createStyles(theme) {
       borderRadius: 28,
       borderWidth: 1,
       borderColor: theme.border,
-      padding: 18,
+      padding: 16,
       gap: 16,
+      shadowColor: theme.shadowStrong,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
+      elevation: 3,
+    },
+    confirmationCycleCard: {
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: "rgba(181, 110, 255, 0.22)",
+      backgroundColor: "rgba(181, 110, 255, 0.08)",
+      padding: 16,
+      gap: 12,
+    },
+    confirmationCycleHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    confirmationCycleTitle: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    confirmationCycleText: {
+      color: theme.textMuted,
+      fontSize: 13,
+      lineHeight: 20,
+      fontWeight: "600",
+    },
+    reopenConfirmationButton: {
+      minHeight: 52,
+      borderRadius: 18,
+      backgroundColor: theme.primary,
+      borderWidth: 1,
+      borderColor: theme.primaryPressed,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      elevation: 4,
+    },
+    reopenConfirmationButtonText: {
+      color: "#ffffff",
+      fontSize: 14,
+      fontWeight: "800",
     },
     accentCardShell: {
       flexDirection: "row",
-      borderRadius: 28,
       overflow: "hidden",
+      borderRadius: 28,
       backgroundColor: theme.surface,
       borderWidth: 1,
       borderColor: theme.border,
+      shadowColor: theme.shadowStrong,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.16,
+      shadowRadius: 18,
+      elevation: 4,
     },
     sectionAccent: {
       width: 4,
@@ -1175,8 +1363,8 @@ function createStyles(theme) {
     accentCardContent: {
       flex: 1,
       padding: 18,
-      gap: 16,
       backgroundColor: theme.surface,
+      gap: 16,
     },
     sectionHeader: {
       flexDirection: "row",
@@ -1257,14 +1445,13 @@ function createStyles(theme) {
       width: 54,
       height: 54,
       borderRadius: 18,
-      borderWidth: 1,
-      borderColor: theme.border,
       backgroundColor: theme.inputBackground,
       alignItems: "center",
       justifyContent: "center",
     },
     inlineAction: {
-      minHeight: 40,
+      flex: 1,
+      minHeight: 48,
       paddingHorizontal: 14,
       borderRadius: 16,
       backgroundColor: theme.inputBackground,
@@ -1272,16 +1459,19 @@ function createStyles(theme) {
       borderColor: theme.border,
       alignItems: "center",
       justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
     },
     inlineActionText: {
       color: theme.primary,
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: "800",
     },
     attachmentActionRow: {
       flexDirection: "row",
       gap: 10,
-      flexWrap: "wrap",
+      flexWrap: "nowrap",
+      alignItems: "center",
     },
     threadEmptyState: {
       minHeight: 164,
@@ -1315,16 +1505,12 @@ function createStyles(theme) {
     },
     threadCard: {
       borderRadius: 20,
-      borderWidth: 1,
-      borderColor: theme.border,
       backgroundColor: theme.inputBackground,
       padding: 16,
-      gap: 12,
+      gap: 10,
     },
     replyCard: {
       borderRadius: 20,
-      borderWidth: 1,
-      borderColor: theme.border,
       backgroundColor: theme.surfaceSoft,
       padding: 16,
       gap: 8,

@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AppNavigator from "./navigation/AppNavigator";
 import AppDialog from "./components/common/AppDialog";
+import InAppNotificationBanner from "./components/common/InAppNotificationBanner";
 import { AppProvider, useApp } from "./storage/AppProvider";
 
 function AppShell() {
@@ -12,6 +13,7 @@ function AppShell() {
     <>
       <StatusBar style={theme.statusBar} />
       <AppNavigator />
+      <InAppNotificationBanner />
       <AppDialog />
     </>
   );

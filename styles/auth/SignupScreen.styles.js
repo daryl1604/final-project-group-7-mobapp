@@ -288,6 +288,48 @@ export const signupScreenStyles = StyleSheet.create({
     borderColor: "rgba(248, 113, 113, 0.32)",
     fontWeight: "600",
   },
+  agreementSection: {
+    gap: 8,
+  },
+  agreementRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  checkboxTapTarget: {
+    marginTop: -2,
+    padding: 2,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.24)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  checkboxError: {
+    borderColor: "rgba(248, 113, 113, 0.9)",
+    backgroundColor: "rgba(127, 29, 29, 0.2)",
+  },
+  agreementText: {
+    flex: 1,
+    color: "rgba(241, 245, 249, 0.92)",
+    fontSize: 13,
+    lineHeight: 21,
+  },
+  linkText: {
+    color: "#93c5fd",
+    textDecorationLine: "underline",
+    fontWeight: "800",
+  },
   footerRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -316,5 +358,73 @@ export const signupScreenStyles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     letterSpacing: 0.12,
+  },
+  policyOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(2, 6, 23, 0.72)",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  policyBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  policyCard: {
+    maxHeight: "76%",
+    backgroundColor: "rgba(15, 23, 42, 0.98)",
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    padding: 20,
+    gap: 16,
+    shadowColor: "#020617",
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.34,
+    shadowRadius: 28,
+    elevation: 16,
+  },
+  policyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  policyTitle: {
+    flex: 1,
+    color: "#f8fafc",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  policyClose: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(59, 130, 246, 0.16)",
+  },
+  policyCloseText: {
+    color: "#bfdbfe",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  policyScroll: {
+    flexGrow: 0,
+  },
+  policyScrollContent: {
+    gap: 14,
+    paddingBottom: 4,
+  },
+  policySection: {
+    gap: 6,
+  },
+  policySectionTitle: {
+    color: "#f8fafc",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  policyBody: {
+    color: "rgba(226, 232, 240, 0.92)",
+    fontSize: 14,
+    lineHeight: 22,
   },
 });
