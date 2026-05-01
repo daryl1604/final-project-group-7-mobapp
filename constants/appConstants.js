@@ -44,10 +44,11 @@ export const THEME_OPTIONS = [
   { label: "Dark", value: "dark" },
 ];
 
+// Coffee / Lipa City status palette
 export const STATUS_COLORS = {
-  Pending: "#f59e0b",
-  Ongoing: "#2563eb",
-  "For Confirmation": "#7c3aed",
-  Resolved: "#059669",
-  Rejected: "#dc2626",
+  Pending: "#D4A055",
+  Ongoing: "#7B4F2E",
+  "For Confirmation": "#9B6B3A",
+  Resolved: "#2E7D52",
+  Rejected: "#C0392B",
 };

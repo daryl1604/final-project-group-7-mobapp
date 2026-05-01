@@ -9,10 +9,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import {
   ActivityIndicator,
   Animated,
-  BackHandler,
   Image,
   InteractionManager,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -70,7 +68,6 @@ function createTabOptions(theme, insets, iconMap) {
     sceneStyle: {
       backgroundColor: theme.background,
     },
-    animation: "fade",
     tabBarActiveTintColor: theme.primary,
     tabBarInactiveTintColor: theme.textSoft,
     tabBarLabelStyle: {
@@ -115,107 +112,6 @@ function createTabOptions(theme, insets, iconMap) {
       </View>
     ),
   });
-}
-
-function createResidentTabOptions(theme, insets, iconMap) {
-  return ({ route }) => {
-    const isFabRoute = route.name === "ResidentAddReport";
-
-    return {
-      headerShown: false,
-      sceneStyle: {
-        backgroundColor: theme.background,
-      },
-      animation: "fade",
-      tabBarActiveTintColor: theme.primary,
-      tabBarInactiveTintColor: theme.textSoft,
-      tabBarLabelStyle: {
-        fontSize: 11,
-        fontWeight: "700",
-        marginTop: isFabRoute ? 10 : 2,
-        marginBottom: isFabRoute ? 2 : 6,
-      },
-      tabBarItemStyle: {
-        paddingTop: isFabRoute ? 0 : 8,
-      },
-      tabBarStyle: {
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: 68 + Math.max(insets.bottom, 0),
-        paddingTop: 6,
-        paddingBottom: Math.max(insets.bottom, 8),
-        paddingHorizontal: 12,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        borderBottomLeftRadius: 0,
-        borderBottomRightRadius: 0,
-        backgroundColor: theme.tabBar,
-        borderTopWidth: 1,
-        borderWidth: 1,
-        borderColor: theme.tabBarBorder,
-        shadowColor: theme.shadowStrong,
-        shadowOffset: { width: 0, height: -8 },
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
-        elevation: 10,
-      },
-      tabBarIcon: ({ color, focused }) => {
-        if (isFabRoute) {
-          const fabColors =
-            theme.mode === "dark"
-              ? focused
-                ? ["#1e3f8f", "#16336f"]
-                : ["#234ca7", "#1b3f89"]
-              : focused
-                ? ["#245ee7", "#1d4ed8"]
-                : ["#2f6bff", "#2563eb"];
-
-          return (
-            <View style={styles.fabTabWrap}>
-              <LinearGradient
-                colors={fabColors}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[
-                  styles.fabTabButton,
-                  theme.mode === "dark"
-                    ? styles.fabTabButtonDark
-                    : styles.fabTabButtonLight,
-                ]}
-              >
-                <Ionicons name={iconMap[route.name]} size={28} color="#ffffff" />
-              </LinearGradient>
-            </View>
-          );
-        }
-
-        return (
-          <View style={[styles.tabIconWrap, focused ? { backgroundColor: theme.primarySoft } : null]}>
-            <Ionicons
-              name={iconMap[route.name]}
-              size={route.name === "ResidentProfile" ? 24 : 20}
-              color={color}
-            />
-          </View>
-        );
-      },
-    };
-  };
-}
-
-function createStackScreenOptions(theme) {
-  return {
-    headerShown: false,
-    contentStyle: {
-      backgroundColor: theme.background,
-    },
-    animation: Platform.OS === "ios" ? "default" : "slide_from_right",
-    animationDuration: Platform.OS === "ios" ? 240 : 210,
-    gestureEnabled: true,
-    fullScreenGestureEnabled: true,
-  };
 }
 
 function SideMenuOverlay() {
@@ -338,7 +234,7 @@ function SideMenuOverlay() {
                   <View>
                     <Pressable
                       android_ripple={{ color: "transparent" }}
-                      style={getDrawerPressableStyle}
+                      style={getDrawerPressableStyle()}
                       onPress={() => setManageMenuOpen((current) => !current)}
                     >
                       <View style={styles.drawerIconWrap}>
@@ -364,7 +260,7 @@ function SideMenuOverlay() {
                       <View style={styles.drawerSubmenu}>
                         <Pressable
                           android_ripple={{ color: "transparent" }}
-                          style={getDrawerSubmenuPressableStyle}
+                          style={getDrawerSubmenuPressableStyle()}
                           onPress={() => navigateToManageAction("AddResidentAccountScreen")}
                         >
                           <View style={styles.drawerSubmenuContent}>
@@ -374,7 +270,7 @@ function SideMenuOverlay() {
                         </Pressable>
                         <Pressable
                           android_ripple={{ color: "transparent" }}
-                          style={getDrawerSubmenuPressableStyle}
+                          style={getDrawerSubmenuPressableStyle()}
                           onPress={() => navigateToManageAction("ManageAccountsScreen")}
                         >
                           <View style={styles.drawerSubmenuContent}>
@@ -388,7 +284,7 @@ function SideMenuOverlay() {
                 ) : null}
                 <Pressable
                   android_ripple={{ color: "transparent" }}
-                  style={getDrawerPressableStyle}
+                  style={getDrawerPressableStyle()}
                   onPress={() => navigateTo("Settings")}
                 >
                   <View style={styles.drawerIconWrap}>
@@ -404,7 +300,7 @@ function SideMenuOverlay() {
               <View style={styles.drawerSection}>
                 <Pressable
                   android_ripple={{ color: "transparent" }}
-                  style={getDrawerPressableStyle}
+                  style={getDrawerPressableStyle()}
                   onPress={() => navigateTo("Help")}
                 >
                   <View style={styles.drawerIconWrap}>
@@ -415,7 +311,7 @@ function SideMenuOverlay() {
                 </Pressable>
                 <Pressable
                   android_ripple={{ color: "transparent" }}
-                  style={getDrawerPressableStyle}
+                  style={getDrawerPressableStyle()}
                   onPress={() => navigateTo("About")}
                 >
                   <View style={styles.drawerIconWrap}>
@@ -431,7 +327,7 @@ function SideMenuOverlay() {
               <View style={styles.drawerSection}>
                 <Pressable
                   android_ripple={{ color: "transparent" }}
-                  style={getDrawerPressableStyle}
+                  style={getDrawerPressableStyle()}
                   onPress={async () => {
                     closeDrawer();
                     await logout();
@@ -456,10 +352,8 @@ function SideMenuOverlay() {
 }
 
 function ResidentHomeStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ResidentDashboardScreen" component={ResidentDashboardScreen} />
       <Stack.Screen name="SubmitReport" component={SubmitReportScreen} />
       <Stack.Screen
@@ -473,10 +367,8 @@ function ResidentHomeStack() {
 }
 
 function ResidentReportsStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MyReportsScreen" component={MyReportsScreen} />
       <Stack.Screen
         name="ResidentReportDetails"
@@ -489,10 +381,8 @@ function ResidentReportsStack() {
 }
 
 function AdminHomeStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AdminDashboardScreen" component={AdminDashboardScreen} />
       <Stack.Screen
         name="AdminReportDetails"
@@ -504,10 +394,8 @@ function AdminHomeStack() {
 }
 
 function AdminReportsStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AllReportsScreen" component={AllReportsScreen} />
       <Stack.Screen
         name="AdminReportDetails"
@@ -519,50 +407,40 @@ function AdminReportsStack() {
 }
 
 function AdminAnalyticsStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AdminAnalyticsScreen" component={AdminAnalyticsScreen} />
     </Stack.Navigator>
   );
 }
 
 function AdminProfileStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AdminProfileScreen" component={AdminProfileScreen} />
     </Stack.Navigator>
   );
 }
 
 function ResidentAddReportStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="SubmitReport" component={SubmitReportScreen} />
     </Stack.Navigator>
   );
 }
 
 function ResidentProfileStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ResidentProfileScreen" component={ResidentProfileScreen} />
     </Stack.Navigator>
   );
 }
 
 function AdminManageStack() {
-  const { theme } = useApp();
-
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ManageReportsScreen" component={ManageReportsScreen} />
       <Stack.Screen
         name="AdminReportDetails"
@@ -581,21 +459,16 @@ function ResidentTabs() {
 
   return (
     <Tab.Navigator
-      backBehavior="history"
-      screenOptions={createResidentTabOptions(theme, insets, {
+      screenOptions={createTabOptions(theme, insets, {
         ResidentHome: "grid-outline",
         ResidentReports: "document-text-outline",
-        ResidentAddReport: "add",
+        ResidentAddReport: "add-circle-outline",
         ResidentNotifications: "notifications-outline",
         ResidentProfile: "person-circle-outline",
       })}
     >
       <Tab.Screen name="ResidentHome" component={ResidentHomeStack} options={{ title: "Dashboard" }} />
-      <Tab.Screen
-        name="ResidentReports"
-        component={ResidentReportsStack}
-        options={{ title: "Reports", popToTopOnBlur: true }}
-      />
+      <Tab.Screen name="ResidentReports" component={ResidentReportsStack} options={{ title: "Reports" }} />
       <Tab.Screen name="ResidentAddReport" component={ResidentAddReportStack} options={{ title: "Add Report" }} />
       <Tab.Screen
         name="ResidentNotifications"
@@ -616,7 +489,6 @@ function AdminTabs() {
 
   return (
     <Tab.Navigator
-      backBehavior="history"
       screenOptions={createTabOptions(theme, insets, {
         AdminHome: "grid-outline",
         AdminReports: "folder-open-outline",
@@ -646,10 +518,10 @@ function AdminTabs() {
 }
 
 function AdminRootStack() {
-  const { closeDrawer, theme } = useApp();
+  const { closeDrawer } = useApp();
 
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen
         name="AdminTabsRoot"
         component={AdminTabs}
@@ -668,10 +540,10 @@ function AdminRootStack() {
 }
 
 function ResidentRootStack() {
-  const { closeDrawer, theme } = useApp();
+  const { closeDrawer } = useApp();
 
   return (
-    <Stack.Navigator screenOptions={createStackScreenOptions(theme)}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen
         name="ResidentTabsRoot"
         component={ResidentTabs}
@@ -686,10 +558,8 @@ function ResidentRootStack() {
 }
 
 function AuthStack() {
-  const { theme } = useApp();
-
   return (
-    <RootStack.Navigator initialRouteName="Welcome" screenOptions={createStackScreenOptions(theme)}>
+    <RootStack.Navigator initialRouteName="Welcome" screenOptions={{ headerShown: false }}>
       <RootStack.Screen name="Welcome" component={WelcomeScreen} />
       <RootStack.Screen name="Login" component={LoginScreen} />
       <RootStack.Screen name="Signup" component={SignupScreen} />
@@ -699,7 +569,7 @@ function AuthStack() {
 }
 
 function AppContent() {
-  const { currentUser, closeDrawer, drawerOpen, showAlert } = useApp();
+  const { currentUser, closeDrawer } = useApp();
   const handledResponseRef = useRef(null);
 
   useEffect(() => {
@@ -707,21 +577,6 @@ function AppContent() {
       closeDrawer();
     }
   }, [closeDrawer, currentUser]);
-
-  useEffect(() => {
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (!drawerOpen) {
-        return false;
-      }
-
-      closeDrawer();
-      return true;
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [closeDrawer, drawerOpen]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -742,19 +597,6 @@ function AppContent() {
         return;
       }
 
-      if (data.type === "deleted_report" && currentUser.role === "resident") {
-        const reportTitle = data.details?.reportTitle || "Report";
-        const adminMessage = data.details?.message?.trim();
-        const deletedAt = data.details?.deletedAt ? new Date(data.details.deletedAt).toLocaleString() : "Not available";
-
-        showAlert(
-          "Report Deleted",
-          `${reportTitle}\n\n${adminMessage ? `Admin message: ${adminMessage}\n\n` : ""}Deleted: ${deletedAt}`,
-          { variant: "info" }
-        );
-        return;
-      }
-
       if (data.reportId) {
         if (currentUser.role === "admin") {
           navigationRef.navigate("AdminTabsRoot", {
@@ -764,7 +606,6 @@ function AppContent() {
               params: {
                 selectedReportId: data.reportId,
                 selectionKey: notificationId || `${data.reportId}_${Date.now()}`,
-                scrollTo: data.type === "reply" || data.type === "feedback" ? "feedback" : undefined,
               },
             },
           });
@@ -776,7 +617,6 @@ function AppContent() {
               params: {
                 selectedReportId: data.reportId,
                 selectionKey: notificationId || `${data.reportId}_${Date.now()}`,
-                scrollTo: data.type === "reply" || data.type === "feedback" ? "feedback" : undefined,
               },
             },
           });
@@ -809,7 +649,7 @@ function AppContent() {
     return () => {
       subscription?.remove?.();
     };
-  }, [currentUser, closeDrawer, showAlert]);
+  }, [currentUser, closeDrawer]);
 
   return (
     <>
@@ -827,11 +667,9 @@ export default function AppNavigator() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <NavigationContainer ref={navigationRef} theme={getNavigationTheme(theme)}>
-        <AppContent />
-      </NavigationContainer>
-    </View>
+    <NavigationContainer ref={navigationRef} theme={getNavigationTheme(theme)}>
+      <AppContent />
+    </NavigationContainer>
   );
 }
 
@@ -852,31 +690,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-  },
-  fabTabWrap: {
-    marginTop: -34,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fabTabButton: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 14,
-    borderWidth: 4,
-  },
-  fabTabButtonLight: {
-    shadowColor: "rgba(37, 99, 235, 0.48)",
-    borderColor: "#f7faff",
-  },
-  fabTabButtonDark: {
-    shadowColor: "rgba(0, 0, 0, 0.34)",
-    borderColor: "#0d1728",
   },
   drawerBackdrop: {
     ...StyleSheet.absoluteFillObject,

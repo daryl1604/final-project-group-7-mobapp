@@ -25,12 +25,11 @@ export default function ManageReportsScreen({ navigation }) {
       <AppHeader title="Manage" variant="toolbar" />
 
       <View style={styles.actionGrid}>
-        {actionCards.map((item, index) => (
+        {actionCards.map((item) => (
           <Pressable key={item.label} style={styles.actionCard} onPress={item.onPress}>
             <Text style={styles.actionTitle}>{item.label}</Text>
           </Pressable>
         ))}
-        <Text style={styles.actionSeparator}>|</Text>
       </View>
 
       {actionableReports.map((report) => (
@@ -64,12 +63,6 @@ function createStyles(theme) {
       fontSize: 15,
       fontWeight: "900",
       textAlign: "center",
-    },
-    actionSeparator: {
-      position: "absolute",
-      color: theme.textSoft,
-      fontSize: 16,
-      fontWeight: "700",
     },
   });
 }

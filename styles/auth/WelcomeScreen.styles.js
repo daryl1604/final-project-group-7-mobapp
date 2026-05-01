@@ -43,7 +43,7 @@ export const welcomeScreenStyles = StyleSheet.create({
     minHeight: 60,
     borderRadius: 24,
     overflow: "hidden",
-    shadowColor: "#1d4ed8",
+    shadowColor: "#5D3A1F",
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.3,
     shadowRadius: 18,

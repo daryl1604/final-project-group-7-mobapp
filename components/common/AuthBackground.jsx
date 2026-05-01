@@ -16,14 +16,14 @@ function AuthBackground({ blurRadius = 6 }) {
 const styles = StyleSheet.create({
   layer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#020617",
+    backgroundColor: "#100803",
   },
   image: {
     ...StyleSheet.absoluteFillObject,
   },
   gradientOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(4,12,24,0.42)",
+    backgroundColor: "rgba(20, 10, 4, 0.52)",
   },
   bottomFade: {
     position: "absolute",
@@ -31,7 +31,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 240,
-    backgroundColor: "rgba(3,10,20,0.4)",
+    backgroundColor: "rgba(15, 8, 3, 0.48)",
   },
 });
 
